@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,13 +24,15 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.springframework.integration.Message;
+
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.store.MessageGroup;
+import org.springframework.messaging.Message;
 
 /**
  * An implementation of {@link ReleaseStrategy} that simply compares the current size of the message list to the
  * expected 'sequenceSize'.
- * 
+ *
  * @author Mark Fisher
  * @author Marius Bogoevici
  * @author Dave Syer
@@ -56,48 +58,49 @@ public class SequenceSizeReleaseStrategy implements ReleaseStrategy {
 	/**
 	 * Flag that determines if partial sequences are allowed. If true then as soon as enough messages arrive that can be
 	 * ordered they will be released, provided they all have sequence numbers greater than those already released.
-	 * 
-	 * @param releasePartialSequences
+	 *
+	 * @param releasePartialSequences true when partial sequences should be released.
 	 */
 	public void setReleasePartialSequences(boolean releasePartialSequences) {
 		this.releasePartialSequences = releasePartialSequences;
 	}
 
+	@Override
 	public boolean canRelease(MessageGroup messageGroup) {
 
 		boolean canRelease = false;
-		
+
 		Collection<Message<?>> messages = messageGroup.getMessages();
-		
+
 		if (releasePartialSequences && !messages.isEmpty()) {
-			
+
 			if (logger.isTraceEnabled()) {
 				logger.trace("Considering partial release of group [" + messageGroup + "]");
 			}
 			List<Message<?>> sorted = new ArrayList<Message<?>>(messages);
 			Collections.sort(sorted, comparator);
-			
-			int nextSequenceNumber = sorted.get(0).getHeaders().getSequenceNumber();
+
+			int nextSequenceNumber = new IntegrationMessageHeaderAccessor(sorted.get(0)).getSequenceNumber();
 			int lastReleasedMessageSequence = messageGroup.getLastReleasedMessageSequenceNumber();
-			
+
 			if (nextSequenceNumber - lastReleasedMessageSequence == 1){
 				canRelease = true;;
-			}	
+			}
 		}
 		else {
 			int size = messages.size();
-			
+
 			if (size == 0){
 				canRelease = true;
 			}
 			else {
-				int sequenceSize = messageGroup.getOne().getHeaders().getSequenceSize();
+				int sequenceSize = new IntegrationMessageHeaderAccessor(messageGroup.getOne()).getSequenceSize();
 				// If there is no sequence then it must be incomplete....
 				if (sequenceSize == size){
 					canRelease = true;
 				}
 			}
-		}	
+		}
 		return canRelease;
 	}
 

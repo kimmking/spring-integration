@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,13 @@ package org.springframework.integration.support.json;
 
 import java.lang.reflect.Type;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.Message;
 
 /**
  * Base {@link JsonInboundMessageMapper.JsonMessageParser} implementation for Jackson processors.
@@ -27,17 +32,27 @@ import org.springframework.integration.support.MessageBuilder;
  * @author Artem Bilan
  * @since 3.0
  *
- * @see Jackson2JsonMessageParser
- * @see JacksonJsonMessageParser
  */
-abstract class AbstractJacksonJsonMessageParser<P> implements JsonInboundMessageMapper.JsonMessageParser<P> {
+abstract class AbstractJacksonJsonMessageParser<P> implements JsonInboundMessageMapper.JsonMessageParser<P>,
+		BeanFactoryAware {
 
-	private final JsonObjectMapper<P> objectMapper;
+	private final JsonObjectMapper<?, P> objectMapper;
 
 	private volatile JsonInboundMessageMapper messageMapper;
 
-	protected AbstractJacksonJsonMessageParser(JsonObjectMapper<P> objectMapper) {
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
+	protected AbstractJacksonJsonMessageParser(JsonObjectMapper<?, P> objectMapper) {
 		this.objectMapper = objectMapper;
+	}
+
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(beanFactory);
+	}
+
+	protected MessageBuilderFactory getMessageBuilderFactory() {
+		return messageBuilderFactory;
 	}
 
 	@Override
@@ -49,7 +64,7 @@ abstract class AbstractJacksonJsonMessageParser<P> implements JsonInboundMessage
 
 		if (messageMapper.isMapToPayload()) {
 			Object payload = this.readPayload(parser, jsonMessage);
-			return MessageBuilder.withPayload(payload).build();
+			return this.messageBuilderFactory.withPayload(payload).build();
 		}
 		else {
 			return this.parseWithHeaders(parser, jsonMessage);

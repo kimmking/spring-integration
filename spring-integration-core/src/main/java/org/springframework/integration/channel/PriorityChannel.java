@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,21 +20,22 @@ import java.util.Comparator;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.util.UpperBound;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHeaders;
 
 /**
  * A message channel that prioritizes messages based on a {@link Comparator}.
  * The default comparator is based upon the message header's 'priority'.
- * 
+ *
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  */
 public class PriorityChannel extends QueueChannel {
 
 	private final UpperBound upperBound;
-	
+
 	private final AtomicLong sequenceCounter = new AtomicLong();
 
 	/**
@@ -42,7 +43,10 @@ public class PriorityChannel extends QueueChannel {
 	 * is a non-positive value, the queue will be unbounded. Message priority
 	 * will be determined by the provided {@link Comparator}. If the comparator
 	 * is <code>null</code>, the priority will be based upon the value of
-	 * {@link MessageHeaders#getPriority()}.
+	 * {@link IntegrationMessageHeaderAccessor#getPriority()}.
+	 *
+	 * @param capacity The capacity.
+	 * @param comparator The comparator.
 	 */
 	public PriorityChannel(int capacity, Comparator<Message<?>> comparator) {
 		super(new PriorityBlockingQueue<Message<?>>(11, new SequenceFallbackComparator(comparator)));
@@ -51,7 +55,9 @@ public class PriorityChannel extends QueueChannel {
 
 	/**
 	 * Create a channel with the specified queue capacity. Message priority
-	 * will be based upon the value of {@link MessageHeaders#getPriority()}.
+	 * will be based upon the value of {@link IntegrationMessageHeaderAccessor#getPriority()}.
+	 *
+	 * @param capacity The queue capacity.
 	 */
 	public PriorityChannel(int capacity) {
 		this(capacity, null);
@@ -61,7 +67,9 @@ public class PriorityChannel extends QueueChannel {
 	 * Create a channel with an unbounded queue. Message priority will be
 	 * determined by the provided {@link Comparator}. If the comparator
 	 * is <code>null</code>, the priority will be based upon the value of
-	 * {@link MessageHeaders#getPriority()}.
+	 * {@link IntegrationMessageHeaderAccessor#getPriority()}.
+	 *
+	 * @param comparator The comparator.
 	 */
 	public PriorityChannel(Comparator<Message<?>> comparator) {
 		this(0, comparator);
@@ -69,7 +77,7 @@ public class PriorityChannel extends QueueChannel {
 
 	/**
 	 * Create a channel with an unbounded queue. Message priority will be
-	 * based on the value of {@link MessageHeaders#getPriority()}.
+	 * based on the value of {@link IntegrationMessageHeaderAccessor#getPriority()}.
 	 */
 	public PriorityChannel() {
 		this(0, null);
@@ -93,29 +101,30 @@ public class PriorityChannel extends QueueChannel {
 		}
 		return message;
 	}
-	
+
 	private static class SequenceFallbackComparator implements Comparator<Message<?>> {
-		
+
 		private final Comparator<Message<?>> targetComparator;
-		
+
 		public SequenceFallbackComparator(Comparator<Message<?>> targetComparator){
 			this.targetComparator = targetComparator;
 		}
 
+		@Override
 		public int compare(Message<?> message1, Message<?> message2) {
 			int compareResult = 0;
 			if (this.targetComparator != null){
 				compareResult = this.targetComparator.compare(message1, message2);
 			}
 			else {
-				Integer priority1 = message1.getHeaders().getPriority();
-				Integer priority2 = message2.getHeaders().getPriority();
-				
+				Integer priority1 = new IntegrationMessageHeaderAccessor(message1).getPriority();
+				Integer priority2 = new IntegrationMessageHeaderAccessor(message2).getPriority();
+
 				priority1 = priority1 != null ? priority1 : 0;
 				priority2 = priority2 != null ? priority2 : 0;
 				compareResult = priority2.compareTo(priority1);
 			}
-		
+
 			if (compareResult == 0){
 				Long sequence1 = ((MessageWrapper) message1).getSequence();
 				Long sequence2 = ((MessageWrapper) message2).getSequence();
@@ -124,7 +133,7 @@ public class PriorityChannel extends QueueChannel {
 			return compareResult;
 		}
 	}
-	
+
 	//we need this because of INT-2508
 	private class MessageWrapper implements Message<Object>{
 		private final Message<?> rootMessage;
@@ -139,10 +148,12 @@ public class PriorityChannel extends QueueChannel {
 			return this.rootMessage;
 		}
 
+		@Override
 		public MessageHeaders getHeaders() {
 			return this.rootMessage.getHeaders();
 		}
 
+		@Override
 		public Object getPayload() {
 			return rootMessage.getPayload();
 		}

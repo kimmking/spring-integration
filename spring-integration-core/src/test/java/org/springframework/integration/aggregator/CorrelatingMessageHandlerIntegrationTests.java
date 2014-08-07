@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,35 +16,39 @@
 
 package org.springframework.integration.aggregator;
 
-import org.junit.Before;
-import org.junit.Test;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.store.MessageGroupStore;
-import org.springframework.integration.store.SimpleMessageStore;
-import org.springframework.integration.support.MessageBuilder;
-
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.junit.Before;
+import org.junit.Test;
+
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.integration.store.MessageGroupStore;
+import org.springframework.integration.store.SimpleMessageStore;
+import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+
 public class CorrelatingMessageHandlerIntegrationTests {
 
-	private MessageGroupStore store = new SimpleMessageStore(100);
+	private final MessageGroupStore store = new SimpleMessageStore(100);
 
-	private MessageChannel outputChannel = mock(MessageChannel.class);
+	private final MessageChannel outputChannel = mock(MessageChannel.class);
 
-	private MessageGroupProcessor processor = new PassThroughMessageGroupProcessor();
+	private final MessageGroupProcessor processor = new PassThroughMessageGroupProcessor();
 
-	private AggregatingMessageHandler defaultHandler = new AggregatingMessageHandler(processor, store);
+	private final AggregatingMessageHandler defaultHandler = new AggregatingMessageHandler(processor, store);
 
 	@Before
 	public void setupHandler() {
 		when(outputChannel.send(isA(Message.class))).thenReturn(true);
 		defaultHandler.setOutputChannel(outputChannel);
 		defaultHandler.setSendTimeout(-1);
+		defaultHandler.setBeanFactory(mock(BeanFactory.class));
+		defaultHandler.afterPropertiesSet();
 	}
 
 

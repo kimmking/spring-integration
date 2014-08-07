@@ -26,11 +26,12 @@ import java.util.List;
 
 import org.junit.Test;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.annotation.Header;
 import org.springframework.integration.annotation.Splitter;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 
 /**
@@ -329,14 +330,14 @@ public class MethodInvokingSplitterTests {
 		List<Message<?>> replies = replyChannel.clear();
 		Message<?> reply1 = replies.get(0);
 		assertNotNull(reply1);
-		assertEquals(new Integer(2), reply1.getHeaders().getSequenceSize());
-		assertEquals(new Integer(1), reply1.getHeaders().getSequenceNumber());
-		assertEquals(message.getHeaders().getId(), reply1.getHeaders().getCorrelationId());
+		assertEquals(new Integer(2), new IntegrationMessageHeaderAccessor(reply1).getSequenceSize());
+		assertEquals(new Integer(1), new IntegrationMessageHeaderAccessor(reply1).getSequenceNumber());
+		assertEquals(message.getHeaders().getId(), new IntegrationMessageHeaderAccessor(reply1).getCorrelationId());
 		Message<?> reply2 = replies.get(1);
 		assertNotNull(reply2);
-		assertEquals(new Integer(2), reply2.getHeaders().getSequenceSize());
-		assertEquals(new Integer(2), reply2.getHeaders().getSequenceNumber());
-		assertEquals(message.getHeaders().getId(), reply2.getHeaders().getCorrelationId());
+		assertEquals(new Integer(2), new IntegrationMessageHeaderAccessor(reply2).getSequenceSize());
+		assertEquals(new Integer(2), new IntegrationMessageHeaderAccessor(reply2).getSequenceNumber());
+		assertEquals(message.getHeaders().getId(), new IntegrationMessageHeaderAccessor(reply2).getCorrelationId());
 	}
 
 	@Test
@@ -349,14 +350,14 @@ public class MethodInvokingSplitterTests {
 		List<Message<?>> replies = replyChannel.clear();
 		Message<?> reply1 = replies.get(0);
 		assertNotNull(reply1);
-		assertEquals(new Integer(2), reply1.getHeaders().getSequenceSize());
-		assertEquals(new Integer(1), reply1.getHeaders().getSequenceNumber());
-		assertEquals(message.getHeaders().getId(), reply1.getHeaders().getCorrelationId());
+		assertEquals(new Integer(2), new IntegrationMessageHeaderAccessor(reply1).getSequenceSize());
+		assertEquals(new Integer(1), new IntegrationMessageHeaderAccessor(reply1).getSequenceNumber());
+		assertEquals(message.getHeaders().getId(), new IntegrationMessageHeaderAccessor(reply1).getCorrelationId());
 		Message<?> reply2 = replies.get(1);
 		assertNotNull(reply2);
-		assertEquals(new Integer(2), reply2.getHeaders().getSequenceSize());
-		assertEquals(new Integer(2), reply2.getHeaders().getSequenceNumber());
-		assertEquals(message.getHeaders().getId(), reply2.getHeaders().getCorrelationId());
+		assertEquals(new Integer(2), new IntegrationMessageHeaderAccessor(reply2).getSequenceSize());
+		assertEquals(new Integer(2), new IntegrationMessageHeaderAccessor(reply2).getSequenceNumber());
+		assertEquals(message.getHeaders().getId(), new IntegrationMessageHeaderAccessor(reply2).getCorrelationId());
 	}
 
 	@Test

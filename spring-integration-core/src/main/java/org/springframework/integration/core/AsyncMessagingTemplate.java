@@ -23,8 +23,11 @@ import java.util.concurrent.Future;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.support.TaskExecutorAdapter;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.integration.core.MessagingTemplate;
+import org.springframework.messaging.core.MessagePostProcessor;
 import org.springframework.util.Assert;
 
 /**
@@ -118,7 +121,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncReceiveAndConvert() {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) receiveAndConvert();
+				return (R) receiveAndConvert(null);
 			}
 		});
 	}
@@ -127,7 +130,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncReceiveAndConvert(final PollableChannel channel) {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) receiveAndConvert(channel);
+				return (R) receiveAndConvert(channel, null);
 			}
 		});
 	}
@@ -136,7 +139,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncReceiveAndConvert(final String channelName) {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) receiveAndConvert(channelName);
+				return (R) receiveAndConvert(channelName, null);
 			}
 		});
 	}
@@ -169,7 +172,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncConvertSendAndReceive(final Object request) {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) convertSendAndReceive(request);
+				return (R) convertSendAndReceive(request, null);
 			}
 		});
 	}
@@ -178,7 +181,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncConvertSendAndReceive(final MessageChannel channel, final Object request) {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) convertSendAndReceive(channel, request);
+				return (R) convertSendAndReceive(channel, request, null);
 			}
 		});
 	}
@@ -187,7 +190,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncConvertSendAndReceive(final String channelName, final Object request) {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) convertSendAndReceive(channelName, request);
+				return (R) convertSendAndReceive(channelName, request, null);
 			}
 		});
 	}
@@ -196,7 +199,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncConvertSendAndReceive(final Object request, final MessagePostProcessor requestPostProcessor) {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) convertSendAndReceive(request, requestPostProcessor);
+				return (R) convertSendAndReceive(request, null, requestPostProcessor);
 			}
 		});
 	}
@@ -205,7 +208,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncConvertSendAndReceive(final MessageChannel channel, final Object request, final MessagePostProcessor requestPostProcessor) {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) convertSendAndReceive(channel, request, requestPostProcessor);
+				return (R) convertSendAndReceive(channel, request, null, requestPostProcessor);
 			}
 		});
 	}
@@ -214,7 +217,7 @@ public class AsyncMessagingTemplate extends MessagingTemplate implements AsyncMe
 	public <R> Future<R> asyncConvertSendAndReceive(final String channelName, final Object request, final MessagePostProcessor requestPostProcessor) {
 		return this.executor.submit(new Callable<R>() {
 			public R call() throws Exception {
-				return (R) convertSendAndReceive(channelName, request, requestPostProcessor);
+				return (R) convertSendAndReceive(channelName, request, null, requestPostProcessor);
 			}
 		});
 	}

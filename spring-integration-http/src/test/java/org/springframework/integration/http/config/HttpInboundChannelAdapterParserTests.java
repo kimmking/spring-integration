@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,9 +42,9 @@ import org.springframework.expression.Expression;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.converter.HttpMessageConverter;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.core.PollableChannel;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.PollableChannel;
 import org.springframework.integration.history.MessageHistory;
 import org.springframework.integration.http.AbstractHttpInboundTests;
 import org.springframework.integration.http.converter.SerializingHttpMessageConverter;
@@ -128,7 +128,7 @@ public class HttpInboundChannelAdapterParserTests extends AbstractHttpInboundTes
 		request.setParameter("foo", "bar");
 		MockHttpServletResponse response = new MockHttpServletResponse();
 		defaultAdapter.handleRequest(request, response);
-		assertEquals(HttpServletResponse.SC_OK, response.getStatus());
+		assertEquals(HttpServletResponse.SC_SWITCHING_PROTOCOLS, response.getStatus());
 		Message<?> message = requests.receive(0);
 		assertNotNull(message);
 		Object payload = message.getPayload();
@@ -256,6 +256,15 @@ public class HttpInboundChannelAdapterParserTests extends AbstractHttpInboundTes
 		assertEquals("oops", errorCode);
 		Expression viewExpression = TestUtils.getPropertyValue(inboundController, "viewExpression", Expression.class);
 		assertEquals("foo", viewExpression.getExpressionString());
+
+		MockHttpServletRequest request = new MockHttpServletRequest();
+		request.setMethod("GET");
+		request.setParameter("foo", "bar");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+		inboundController.handleRequest(request, response);
+		assertEquals(HttpServletResponse.SC_ACCEPTED, response.getStatus());
+		Message<?> message = requests.receive(0);
+		assertNotNull(message);
 	}
 
 	@Test

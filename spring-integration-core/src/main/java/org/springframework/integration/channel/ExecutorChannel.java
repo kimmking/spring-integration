@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,13 @@ package org.springframework.integration.channel;
 
 import java.util.concurrent.Executor;
 
-import org.springframework.integration.MessageChannel;
+import org.springframework.integration.context.IntegrationProperties;
 import org.springframework.integration.dispatcher.LoadBalancingStrategy;
 import org.springframework.integration.dispatcher.RoundRobinLoadBalancingStrategy;
 import org.springframework.integration.dispatcher.UnicastingDispatcher;
 import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
 import org.springframework.integration.util.ErrorHandlingTaskExecutor;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.util.Assert;
 import org.springframework.util.ErrorHandler;
 
@@ -41,6 +42,7 @@ import org.springframework.util.ErrorHandler;
  *
  * @author Mark Fisher
  * @author Gary Russell
+ * @author Artem Bilan
  * @since 1.0.3
  */
 public class ExecutorChannel extends AbstractSubscribableChannel {
@@ -51,7 +53,7 @@ public class ExecutorChannel extends AbstractSubscribableChannel {
 
 	private volatile boolean failover = true;
 
-	private volatile int maxSubscribers = Integer.MAX_VALUE;
+	private volatile Integer maxSubscribers;
 
 	private volatile LoadBalancingStrategy loadBalancingStrategy;
 
@@ -61,6 +63,8 @@ public class ExecutorChannel extends AbstractSubscribableChannel {
 	 * {@link Executor} when dispatching Messages.
 	 * <p>
 	 * The Executor must not be null.
+	 *
+	 * @param executor The executor.
 	 */
 	public ExecutorChannel(Executor executor) {
 		this(executor, new RoundRobinLoadBalancingStrategy());
@@ -71,6 +75,9 @@ public class ExecutorChannel extends AbstractSubscribableChannel {
 	 * delegates to the provided {@link Executor} when dispatching Messages.
 	 * <p>
 	 * The Executor must not be null.
+	 *
+	 * @param executor The executor.
+	 * @param loadBalancingStrategy The load balancing strategy implementation.
 	 */
 	public ExecutorChannel(Executor executor, LoadBalancingStrategy loadBalancingStrategy) {
 		Assert.notNull(executor, "executor must not be null");
@@ -86,6 +93,8 @@ public class ExecutorChannel extends AbstractSubscribableChannel {
 	/**
 	 * Specify whether the channel's dispatcher should have failover enabled.
 	 * By default, it will. Set this value to 'false' to disable it.
+	 *
+	 * @param failover The failover boolean.
 	 */
 	public void setFailover(boolean failover) {
 		this.failover = failover;
@@ -95,7 +104,8 @@ public class ExecutorChannel extends AbstractSubscribableChannel {
 	/**
 	 * Specify the maximum number of subscribers supported by the
 	 * channel's dispatcher.
-	 * @param maxSubscribers
+	 *
+	 * @param maxSubscribers The maximum number of subscribers allowed.
 	 */
 	public void setMaxSubscribers(int maxSubscribers) {
 		this.maxSubscribers = maxSubscribers;
@@ -116,7 +126,10 @@ public class ExecutorChannel extends AbstractSubscribableChannel {
 		}
 		this.dispatcher = new UnicastingDispatcher(this.executor);
 		this.dispatcher.setFailover(this.failover);
-		this.dispatcher.setMaxSubscribers(maxSubscribers);
+		if (this.maxSubscribers == null) {
+			this.maxSubscribers = this.getIntegrationProperty(IntegrationProperties.CHANNELS_MAX_UNICAST_SUBSCRIBERS, Integer.class);
+		}
+		this.dispatcher.setMaxSubscribers(this.maxSubscribers);
 		if (this.loadBalancingStrategy != null) {
 			this.dispatcher.setLoadBalancingStrategy(this.loadBalancingStrategy);
 		}

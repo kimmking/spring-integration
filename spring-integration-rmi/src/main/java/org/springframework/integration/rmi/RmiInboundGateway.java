@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,11 @@ package org.springframework.integration.rmi;
 import java.rmi.registry.Registry;
 
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.gateway.MessagingGatewaySupport;
 import org.springframework.integration.gateway.RequestReplyExchanger;
 import org.springframework.integration.support.context.NamedComponent;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.remoting.rmi.RmiServiceExporter;
 import org.springframework.remoting.support.RemoteInvocationExecutor;
 import org.springframework.util.Assert;
@@ -31,7 +31,7 @@ import org.springframework.util.StringUtils;
 
 /**
  * An inbound Messaging Gateway for RMI-based remoting.
- * 
+ *
  * @author Mark Fisher
  */
 public class RmiInboundGateway extends MessagingGatewaySupport implements RequestReplyExchanger, InitializingBean {
@@ -71,6 +71,8 @@ public class RmiInboundGateway extends MessagingGatewaySupport implements Reques
 	/**
 	 * Specify whether the gateway should be expected to return a reply.
 	 * The default is '<code>true</code>'.
+	 *
+	 * @param expectReply true when a reply is expected.
 	 */
 	public void setExpectReply(boolean expectReply) {
 		this.expectReply = expectReply;
@@ -87,7 +89,8 @@ public class RmiInboundGateway extends MessagingGatewaySupport implements Reques
 	public void setRemoteInvocationExecutor(RemoteInvocationExecutor remoteInvocationExecutor) {
 		this.remoteInvocationExecutor = remoteInvocationExecutor;
 	}
-	
+
+	@Override
 	public String getComponentType() {
 		return "rmi:inbound-gateway";
 	}
@@ -114,6 +117,7 @@ public class RmiInboundGateway extends MessagingGatewaySupport implements Reques
 		super.onInit();
 	}
 
+	@Override
 	public Message<?> exchange(Message<?> message) {
 		if (this.expectReply) {
 			return this.sendAndReceiveMessage(message);

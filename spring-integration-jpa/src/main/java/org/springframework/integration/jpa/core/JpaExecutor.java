@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,6 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
 import org.springframework.expression.common.LiteralExpression;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.expression.IntegrationEvaluationContextAware;
 import org.springframework.integration.jpa.support.JpaParameter;
 import org.springframework.integration.jpa.support.PersistMode;
@@ -37,6 +35,8 @@ import org.springframework.integration.jpa.support.parametersource.BeanPropertyP
 import org.springframework.integration.jpa.support.parametersource.ExpressionEvaluatingParameterSourceFactory;
 import org.springframework.integration.jpa.support.parametersource.ParameterSource;
 import org.springframework.integration.jpa.support.parametersource.ParameterSourceFactory;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
@@ -61,6 +61,7 @@ import org.springframework.util.Assert;
  *
  * @author Gunnar Hillert
  * @author Amol Nayak
+ * @author Artem Bilan
  * @since 2.2
  *
  */
@@ -79,12 +80,21 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 
 	private volatile Expression firstResultExpression;
 
+	private volatile Expression idExpression;
+
 	private volatile PersistMode persistMode = PersistMode.MERGE;
 
 	private volatile ParameterSourceFactory parameterSourceFactory = null;
 	private volatile ParameterSource parameterSource;
 
+	private volatile boolean  flush = false;
+
+	private volatile int flushSize = 0;
+
+	private volatile boolean  clearOnFlush = false;
+
 	private volatile boolean  deleteAfterPoll = false;
+
 	private volatile boolean  deleteInBatch = false;
 
 	private volatile boolean  expectSingleResult = false;
@@ -104,7 +114,6 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	/**
 	 * Constructor taking an {@link EntityManagerFactory} from which the
 	 * {@link EntityManager} can be obtained.
-	 *
 	 * @param entityManagerFactory Must not be null.
 	 */
 	public JpaExecutor(EntityManagerFactory entityManagerFactory) {
@@ -119,7 +128,6 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 
 	/**
 	 * Constructor taking an {@link EntityManager} directly.
-	 *
 	 * @param entityManager Must not be null.
 	 */
 	public JpaExecutor(EntityManager entityManager) {
@@ -135,9 +143,7 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	 * If custom behavior is required a custom implementation of {@link JpaOperations}
 	 * can be passed in. The implementations themselves typically provide access
 	 * to the {@link EntityManager}.
-	 *
 	 * See also {@link DefaultJpaOperations} and {@link AbstractJpaOperations}.
-	 *
 	 * @param jpaOperations Must not be null.
 	 */
 	public JpaExecutor(JpaOperations jpaOperations) {
@@ -151,10 +157,8 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	}
 
 	/**
-	 *
-	 * Verifies and sets the parameters. E.g. initializes the to be used
+	 * Verify and sets the parameters. E.g. initializes the to be used
 	 * {@link ParameterSourceFactory}.
-	 *
 	 */
 	@Override
 	public void afterPropertiesSet() {
@@ -194,17 +198,22 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 				this.usePayloadAsParameterSource = true;
 			}
 		}
+
+		if (this.flushSize > 0) {
+			this.flush = true;
+		}
+		else if (this.flush) {
+			this.flushSize = 1;
+		}
 	}
 
 	/**
-	 * Executes the actual Jpa Operation. Call this method, if you need access to
+	 * Execute the actual Jpa Operation. Call this method, if you need access to
 	 * process return values. This methods return a Map that contains either
 	 * the number of affected entities or the affected entity itself.
-	 *
-	 * Keep in mind that the number of entities effected by the operation may
+	 *<p>Keep in mind that the number of entities effected by the operation may
 	 * not necessarily correlate with the number of rows effected in the database.
-	 *
-	 * @param message
+	 * @param message The message.
 	 * @return Either the number of affected entities when using a JPQL query.
 	 * When using a merge/persist the updated/inserted itself is returned.
 	 */
@@ -228,14 +237,17 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 		else {
 
 			if (PersistMode.PERSIST.equals(this.persistMode)) {
-				this.jpaOperations.persist(message.getPayload());
+				this.jpaOperations.persist(message.getPayload(), this.flushSize, this.clearOnFlush);
 				result = message.getPayload();
 			}
 			else if (PersistMode.MERGE.equals(this.persistMode)) {
-				result = this.jpaOperations.merge(message.getPayload());
+				result = this.jpaOperations.merge(message.getPayload(), this.flushSize, this.clearOnFlush);
 			}
 			else if (PersistMode.DELETE.equals(this.persistMode)) {
 				this.jpaOperations.delete(message.getPayload());
+				if (this.flush) {
+					this.jpaOperations.flush();
+				}
 				result = message.getPayload();
 			}
 			else {
@@ -255,43 +267,54 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	 * {@link JpaExecutor#parameterSourceFactory}. If the
 	 * <i>requestMessage</i> parameter is null then
 	 * {@link JpaExecutor#parameterSource} is being used for providing query parameters.
-	 *
 	 * @param requestMessage May be null.
 	 * @return The payload object, which may be null.
 	 */
 	@SuppressWarnings("unchecked")
 	public Object poll(final Message<?> requestMessage) {
 		final Object payload;
-		final List<?> result;
-		int maxNumberOfResults = this.evaluateExpressionForNumericResult(requestMessage, this.maxResultsExpression);
-		if (requestMessage == null) {
-			result = this.doPoll(this.parameterSource, 0, maxNumberOfResults);
-		}
-		else {
-			int firstResult = 0;
-			if(firstResultExpression != null) {
-				firstResult = this.getFirstResult(requestMessage);
+
+		if (this.idExpression != null) {
+			Object id = this.idExpression.getValue(this.evaluationContext, requestMessage);
+			Class<?> entityClass = this.entityClass;
+			if (entityClass == null) {
+				entityClass = requestMessage.getPayload().getClass();
 			}
-			ParameterSource parameterSource = this.determineParameterSource(requestMessage);
-			result = this.doPoll(parameterSource, firstResult, maxNumberOfResults);
-		}
-
-		if (result.isEmpty()) {
-			payload = null;
+			payload = this.jpaOperations.find(entityClass, id);
 		}
 		else {
 
-			if (this.expectSingleResult) {
-				if (result.size() == 1) {
-					payload = result.iterator().next();
-				}
-				else {
-					throw new MessagingException(requestMessage,
-						"The Jpa operation returned more than 1 result object but expectSingleResult was 'true'.");
-				}
+			final List<?> result;
+			int maxNumberOfResults = this.evaluateExpressionForNumericResult(requestMessage, this.maxResultsExpression);
+			if (requestMessage == null) {
+				result = this.doPoll(this.parameterSource, 0, maxNumberOfResults);
 			}
 			else {
-				payload = result;
+				int firstResult = 0;
+				if (firstResultExpression != null) {
+					firstResult = this.getFirstResult(requestMessage);
+				}
+				ParameterSource parameterSource = this.determineParameterSource(requestMessage);
+				result = this.doPoll(parameterSource, firstResult, maxNumberOfResults);
+			}
+
+			if (result.isEmpty()) {
+				payload = null;
+			}
+			else {
+
+				if (this.expectSingleResult) {
+					if (result.size() == 1) {
+						payload = result.iterator().next();
+					}
+					else {
+						throw new MessagingException(requestMessage,
+								"The Jpa operation returned more than 1 result object but expectSingleResult was 'true'.");
+					}
+				}
+				else {
+					payload = result;
+				}
 			}
 		}
 
@@ -310,6 +333,9 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 				this.jpaOperations.delete(payload);
 			}
 
+			if (this.flush) {
+				this.jpaOperations.flush();
+			}
 		}
 		return payload;
 	}
@@ -358,6 +384,7 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 
 	/**
 	 * Execute the JPA operation. Delegates to {@link JpaExecutor#poll(Message)}.
+	 * @return The object or null.
 	 */
 	public Object poll() {
 		return this.poll(null);
@@ -391,7 +418,6 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	/**
 	 * Sets the class type which is being used for retrieving entities from the
 	 * database.
-	 *
 	 * @param entityClass Must not be null.
 	 */
 	public void setEntityClass(Class<?> entityClass) {
@@ -414,7 +440,6 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	 * this property will allow you to use native SQL. Optionally you can also set
 	 * the entityClass property at the same time. If specified the entityClass will
 	 * be used as the result class for the native query.
-	 *
 	 * @param nativeQuery The provided SQL query must neither be null nor empty.
 	 */
 	public void setNativeQuery(String nativeQuery) {
@@ -429,7 +454,6 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	/**
 	 * A named query can either refer to a named JPQL based query or a native SQL
 	 * query.
-	 *
 	 * @param namedQuery Must neither be null nor empty
 	 */
 	public void setNamedQuery(String namedQuery) {
@@ -454,20 +478,51 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	}
 
 	/**
+	 * If set to {@code true} the {@link javax.persistence.EntityManager#flush()} will be called
+	 * after persistence operation.
+	 * Has the same effect, if the {@link #flushSize} is specified to {@code 1}.
+	 * For convenience in cases when the provided entity to persist is not an instance of {@link Iterable}.
+	 * @param flush defaults to 'false'.
+	 */
+	public void setFlush(boolean flush) {
+		this.flush = flush;
+	}
+
+	/**
+	 * If the provided value is greater than {@code 0}, then {@link javax.persistence.EntityManager#flush()}
+	 * will be called after persistence operations as well as within batch operations.
+	 * This property has precedence over the {@link #flush}, if it is specified to a value greater than {@code 0}.
+	 * If the entity to persist is not an instance of {@link Iterable} and this property is greater than {@code 0},
+	 * then the entity will be flushed as if the {@link #flush} attribute was set to {@code true}.
+	 * @param flushSize defaults to '0'.
+	 */
+	public void setFlushSize(int flushSize) {
+		Assert.state(flushSize >= 0, "'flushSize' cannot be less than '0'.");
+		this.flushSize = flushSize;
+	}
+
+	/**
+	 * If set to {@code true} the {@link javax.persistence.EntityManager#clear()} will be called,
+	 * and only if the {@link javax.persistence.EntityManager#flush()} was called after performing persistence operations.
+	 * @param clearOnFlush defaults to 'false'.
+	 * @see #setFlush(boolean)
+	 * @see #setFlushSize(int)
+	 */
+	public void setClearOnFlush(boolean clearOnFlush) {
+		this.clearOnFlush = clearOnFlush;
+	}
+
+	/**
 	 * If not set, this property defaults to <code>false</code>, which means that
 	 * deletion occurs on a per object basis if a collection of entities is being
 	 * deleted.
-	 *
-	 * If set to 'true' the elements of the payload are deleted as a batch
+	 *<p>If set to 'true' the elements of the payload are deleted as a batch
 	 * operation. Be aware that this exhibits issues in regards to cascaded deletes.
-	 *
-	 * The specification 'JSR 317: Java Persistence API, Version 2.0' does not
+	 *<p>The specification 'JSR 317: Java Persistence API, Version 2.0' does not
 	 * support cascaded deletes in batch operations. The specification states in
 	 * chapter 4.10:
-	 *
-	 * "A delete operation only applies to entities of the specified class and
+	 *<p>"A delete operation only applies to entities of the specified class and
 	 * its subclasses. It does not cascade to related entities."
-	 *
 	 * @param deleteInBatch Defaults to 'false' if not set.
 	 */
 	public void setDeleteInBatch(boolean deleteInBatch) {
@@ -477,7 +532,6 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	/**
 	 * If set to 'true', the retrieved objects are deleted from the database upon
 	 * being polled. May not work in all situations, e.g. for Native SQL Queries.
-	 *
 	 * @param deleteAfterPoll Defaults to 'false'.
 	 */
 	public void setDeleteAfterPoll(boolean deleteAfterPoll) {
@@ -485,7 +539,6 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	}
 
 	/**
-	 *
 	 * @param parameterSourceFactory Must not be null
 	 */
 	public void setParameterSourceFactory(ParameterSourceFactory parameterSourceFactory) {
@@ -494,9 +547,8 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	}
 
 	/**
-	 * Specifies the {@link ParameterSource} that would be used to provide
+	 * Specify the {@link ParameterSource} that would be used to provide
 	 * additional parameters.
-	 *
 	 * @param parameterSource Must not be null.
 	 */
 	public void setParameterSource(ParameterSource parameterSource) {
@@ -510,13 +562,12 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	 * a result from the executed JPA operation. If set to <code>true</code> and
 	 * the result list from the JPA operations contains only 1 element, then that
 	 * 1 element is extracted and returned as payload.
-	 *
-	 * If the result map contains more than 1 element and
+	 * <p>If the result map contains more than 1 element and
 	 * {@link JpaExecutor#expectSingleResult} is <code>true</code>, then a
 	 * {@link MessagingException} is thrown.
-	 *
-	 * If set to <code>false</code>, the complete result list is returned as the
+	 * <p>If set to <code>false</code>, the complete result list is returned as the
 	 * payload.
+	 * @param expectSingleResult true if a single object is expected.
 	 *
 	 */
 	public void setExpectSingleResult(boolean expectSingleResult) {
@@ -524,11 +575,9 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	}
 
 	/**
-	 * Sets the expression that will be evaluated to get the first result in the query executed.
+	 * Set the expression that will be evaluated to get the first result in the query executed.
 	 * If a null expression is set, all the results in the result set will be retrieved
-	 *
-	 * @param firstResultExpression
-	 *
+	 * @param firstResultExpression The first result expression.
 	 * @see Query#setFirstResult(int)
 	 */
 	public void setFirstResultExpression(Expression firstResultExpression) {
@@ -536,12 +585,22 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	}
 
 
+	/**
+	 * Set the expression that will be evaluated to get the {@code primaryKey} for
+	 * {@link javax.persistence.EntityManager#find(Class, Object)}
+	 * @param idExpression The first result expression.
+	 * @since 4.0
+	 */
+	public void setIdExpression(Expression idExpression) {
+		this.idExpression = idExpression;
+	}
+
+
 
 	/**
-	 * Sets the expression for maximum number of results expression. It has be a non null value
+	 * Set the expression for maximum number of results expression. It has be a non null value
 	 * Not setting one will default to the behavior of fetching all the records
-	 *
-	 * @param maxResultsExpression
+	 * @param maxResultsExpression The maximum results expression.
 	 */
 	public void setMaxResultsExpression(Expression maxResultsExpression) {
 		Assert.notNull(maxResultsExpression, "maxResultsExpression cannot be null");
@@ -551,9 +610,7 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	/**
 	  * Set the max number of results to retrieve from the database. Defaults to
 	  * 0, which means that all possible objects shall be retrieved.
-	  *
 	  * @param maxNumberOfResults Must not be negative.
-	  *
 	  * @see Query#setMaxResults(int)
 	  */
 	 public void setMaxNumberOfResults(int maxNumberOfResults) {
@@ -563,8 +620,7 @@ public class JpaExecutor implements InitializingBean, BeanFactoryAware, Integrat
 	/**
 	 * Sets the evaluation context for evaluating the expression to get the from record of the
 	 * result set retrieved by the retrieving gateway.
-	 *
-	 * @param evaluationContext
+	 * @param evaluationContext The evaluation context.
 	 */
 	@Override
 	public void setIntegrationEvaluationContext(EvaluationContext evaluationContext) {

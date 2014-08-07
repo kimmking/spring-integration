@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.expression.Expression;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.core.MessageSource;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.integration.support.context.NamedComponent;
 import org.springframework.integration.util.AbstractExpressionEvaluator;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.CollectionUtils;
 
 /**
@@ -33,19 +35,32 @@ import org.springframework.util.CollectionUtils;
  * @author Oleg Zhurakousky
  * @since 2.0
  */
-public abstract class AbstractMessageSource<T> extends AbstractExpressionEvaluator implements MessageSource<T> {
+public abstract class AbstractMessageSource<T> extends AbstractExpressionEvaluator implements MessageSource<T>,
+		NamedComponent, BeanNameAware {
 
 	private volatile Map<String, Expression> headerExpressions = Collections.emptyMap();
 
+	private volatile String beanName;
 
 	public void setHeaderExpressions(Map<String, Expression> headerExpressions) {
 		this.headerExpressions = (headerExpressions != null)
 				? headerExpressions : Collections.<String, Expression>emptyMap();
 	}
 
+	@Override
+	public void setBeanName(String name) {
+		this.beanName = name;
+	}
+
+	@Override
+	public String getComponentName() {
+		return this.beanName;
+	}
+
+	@Override
 	@SuppressWarnings("unchecked")
 	public final Message<T> receive() {
-		Message<T> message = null; 
+		Message<T> message = null;
 		Object result = this.doReceive();
 		Map<String, Object> headers = this.evaluateHeaders();
 		if (result instanceof Message<?>) {
@@ -57,7 +72,7 @@ public abstract class AbstractMessageSource<T> extends AbstractExpressionEvaluat
 			}
 			if (!CollectionUtils.isEmpty(headers)) {
 				// create a new Message from this one in order to apply headers
-				MessageBuilder<T> builder = MessageBuilder.fromMessage(message);
+				AbstractIntegrationMessageBuilder<T> builder = this.getMessageBuilderFactory().fromMessage(message);
 				builder.copyHeaders(headers);
 				message = builder.build();
 			}
@@ -70,7 +85,7 @@ public abstract class AbstractMessageSource<T> extends AbstractExpressionEvaluat
 			catch (Exception e) {
 				throw new MessagingException("MessageSource returned unexpected type.", e);
 			}
-			MessageBuilder<T> builder = MessageBuilder.withPayload(payload);
+			AbstractIntegrationMessageBuilder<T> builder = this.getMessageBuilderFactory().withPayload(payload);
 			if (!CollectionUtils.isEmpty(headers)) {
 				builder.copyHeaders(headers);
 			}
@@ -93,6 +108,8 @@ public abstract class AbstractMessageSource<T> extends AbstractExpressionEvaluat
 	/**
 	 * Subclasses must implement this method. Typically the returned value will be the payload of
 	 * type T, but the returned value may also be a Message instance whose payload is of type T.
+	 *
+	 * @return The value returned.
 	 */
 	protected abstract Object doReceive();
 

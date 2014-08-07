@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,25 +19,23 @@ package org.springframework.integration.config.xml;
 import org.w3c.dom.Element;
 
 import org.springframework.aop.scope.ScopedProxyUtils;
-import org.springframework.beans.PropertyValue;
-import org.springframework.beans.PropertyValues;
-import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinitionHolder;
-import org.springframework.beans.factory.config.TypedStringValue;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.ManagedList;
 import org.springframework.beans.factory.xml.AbstractBeanDefinitionParser;
 import org.springframework.beans.factory.xml.ParserContext;
+import org.springframework.integration.channel.FixedSubscriberChannel;
 import org.springframework.util.StringUtils;
 import org.springframework.util.xml.DomUtils;
 
 /**
  * Base class for channel parsers.
- * 
+ *
  * @author Mark Fisher
  * @author Dave Syer
+ * @author Artem Bilan
  */
 public abstract class AbstractChannelParser extends AbstractBeanDefinitionParser {
 
@@ -45,32 +43,46 @@ public abstract class AbstractChannelParser extends AbstractBeanDefinitionParser
 	@Override
 	protected AbstractBeanDefinition parseInternal(Element element, ParserContext parserContext) {
 		BeanDefinitionBuilder builder = this.buildBeanDefinition(element, parserContext);
-		ManagedList interceptors = null;
-		Element interceptorsElement = DomUtils.getChildElementByTagName(element, "interceptors");
-		if (interceptorsElement != null) {
-			ChannelInterceptorParser interceptorParser = new ChannelInterceptorParser();
-			interceptors = interceptorParser.parseInterceptors(interceptorsElement, parserContext);
-		}
-		if (interceptors == null) {
-			interceptors = new ManagedList();
-		}
-		String datatypeAttr = element.getAttribute("datatype");
-		if (StringUtils.hasText(datatypeAttr)) {
-			builder.addPropertyValue("datatypes", datatypeAttr);
-		}
-		builder.addPropertyValue("interceptors", interceptors);
 		AbstractBeanDefinition beanDefinition = builder.getBeanDefinition();
-		String scopeAttr = element.getAttribute("scope");
-		if (StringUtils.hasText(scopeAttr)) {
-			builder.setScope(scopeAttr);
+		Element interceptorsElement = DomUtils.getChildElementByTagName(element, "interceptors");
+		String datatypeAttr = element.getAttribute("datatype");
+		String messageConverter = element.getAttribute("message-converter");
+		if (!FixedSubscriberChannel.class.getName().equals(builder.getBeanDefinition().getBeanClassName())) {
+			ManagedList interceptors = null;
+			if (interceptorsElement != null) {
+				ChannelInterceptorParser interceptorParser = new ChannelInterceptorParser();
+				interceptors = interceptorParser.parseInterceptors(interceptorsElement, parserContext);
+			}
+			if (interceptors == null) {
+				interceptors = new ManagedList();
+			}
+			if (StringUtils.hasText(datatypeAttr)) {
+				builder.addPropertyValue("datatypes", datatypeAttr);
+			}
+			if (StringUtils.hasText(messageConverter)) {
+				builder.addPropertyReference("messageConverter", messageConverter);
+			}
+			builder.addPropertyValue("interceptors", interceptors);
+			String scopeAttr = element.getAttribute("scope");
+			if (StringUtils.hasText(scopeAttr)) {
+				builder.setScope(scopeAttr);
+			}
+		}
+		else {
+			if (interceptorsElement != null) {
+				parserContext.getReaderContext().error("Cannot have interceptors when 'fixed-subscriber=\"true\"'", element);
+			}
+			if (StringUtils.hasText(datatypeAttr)) {
+				parserContext.getReaderContext().error("Cannot have 'datatype' when 'fixed-subscriber=\"true\"'", element);
+			}
+			if (StringUtils.hasText(messageConverter)) {
+				parserContext.getReaderContext().error("Cannot have 'message-converter' when 'fixed-subscriber=\"true\"'", element);
+			}
 		}
 		beanDefinition.setSource(parserContext.extractSource(element));
 		return beanDefinition;
 	}
-	
-	/* (non-Javadoc)
-	 * @see org.springframework.beans.factory.xml.AbstractBeanDefinitionParser#registerBeanDefinition(org.springframework.beans.factory.config.BeanDefinitionHolder, org.springframework.beans.factory.support.BeanDefinitionRegistry)
-	 */
+
 	@Override
 	protected void registerBeanDefinition(BeanDefinitionHolder definition, BeanDefinitionRegistry registry) {
 		String scope = definition.getBeanDefinition().getScope();
@@ -86,40 +98,11 @@ public abstract class AbstractChannelParser extends AbstractBeanDefinitionParser
 	 * arguments or properties should be configured. This base class will
 	 * configure the interceptors including the 'datatype' interceptor if
 	 * the 'datatype' attribute is defined on the channel element.
+	 *
+	 * @param element The element.
+	 * @param parserContext The parser context.
+	 * @return The bean definition builder.
 	 */
 	protected abstract BeanDefinitionBuilder buildBeanDefinition(Element element, ParserContext parserContext);
-
-	protected void setMaxSubscribersProperty(ParserContext parserContext, BeanDefinitionBuilder builder, Element element, String channelInitializerPropertyName) {
-		String maxSubscribers = element.getAttribute("max-subscribers");
-		if (!StringUtils.hasText(maxSubscribers)) {
-			maxSubscribers = getDefaultMaxSubscribers(parserContext, channelInitializerPropertyName);
-		}
-		if (StringUtils.hasText(maxSubscribers)) {
-			builder.addPropertyValue("maxSubscribers", maxSubscribers);
-		}
-	}
-
-	protected String getDefaultMaxSubscribers(ParserContext parserContext, String channelInitializerPropertyName) {
-		String maxSubscribers = null;
-		BeanDefinition channelInitializer = parserContext.getRegistry().getBeanDefinition(
-				AbstractIntegrationNamespaceHandler.CHANNEL_INITIALIZER_BEAN_NAME);
-		if (channelInitializer != null) {
-			PropertyValues propertyValues = channelInitializer.getPropertyValues();
-			if (propertyValues != null) {
-				PropertyValue propertyValue = propertyValues
-						.getPropertyValue(channelInitializerPropertyName);
-				if (propertyValue != null) {
-					Object propertyValueValue = propertyValue.getValue();
-					if (propertyValueValue instanceof TypedStringValue) {
-						maxSubscribers = ((TypedStringValue) propertyValueValue).getValue();
-					}
-					else if (propertyValueValue instanceof String) {
-						maxSubscribers = (String) propertyValueValue;
-					}
-				}
-			}
-		}
-		return maxSubscribers;
-	}
 
 }

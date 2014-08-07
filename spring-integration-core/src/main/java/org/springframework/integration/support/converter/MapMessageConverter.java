@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,15 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.converter.MessageConverter;
 import org.springframework.util.Assert;
 
 /**
@@ -29,40 +36,58 @@ import org.springframework.util.Assert;
  * @since 3.0
  *
  */
-public class MapMessageConverter implements MessageConverter {
+public class MapMessageConverter implements MessageConverter, BeanFactoryAware {
 
 	private volatile String[] headerNames;
 
 	private volatile boolean filterHeadersInToMessage;
 
+	private volatile BeanFactory beanFactory;
+
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
+
+	@Override
+	public final void setBeanFactory(BeanFactory beanFactory) {
+		this.beanFactory = beanFactory;
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(this.beanFactory);
+	}
+
+	protected MessageBuilderFactory getMessageBuilderFactory() {
+		return messageBuilderFactory;
+	}
+
 	/**
-	 * Headers to be converted in {@link #fromMessage(Message)}.
-	 * {@link #toMessage(Object)} will populate all headers found in
+	 * Headers to be converted in {@link #fromMessage(Message, Class)}.
+	 * {@link #toMessage(Object, MessageHeaders)} will populate all headers found in
 	 * the map, unless {@link #filterHeadersInToMessage} is true.
-	 * @param headerNames
+	 *
+	 * @param headerNames The header names.
 	 */
 	public void setHeaderNames(String... headerNames) {
 		this.headerNames = headerNames;
 	}
 
 	/**
-	 * By default all headers on Map passed to {@link #toMessage(Object)}
+	 * By default all headers on Map passed to {@link #toMessage(Object, MessageHeaders)}
 	 * will be mapped. Set this property
 	 * to 'true' if you wish to limit the inbound headers to those in
 	 * the #headerNames.
-	 * @param filterHeadersInToMessage
+	 *
+	 * @param filterHeadersInToMessage true if the headers should be filtered.
 	 */
 	public void setFilterHeadersInToMessage(boolean filterHeadersInToMessage) {
 		this.filterHeadersInToMessage = filterHeadersInToMessage;
 	}
 
-	public <P> Message<P> toMessage(Object object) {
+	@Override
+	public Message<?> toMessage(Object object, MessageHeaders messageHeaders) {
 		Assert.isInstanceOf(Map.class, object, "This converter expects a Map");
 		@SuppressWarnings("unchecked")
 		Map<String, ?> map = (Map<String, ?>) object;
 		Object payload = map.get("payload");
 		Assert.notNull(payload, "'payload' entry cannot be null");
-		MessageBuilder<?> messageBuilder = MessageBuilder.withPayload(payload);
+		AbstractIntegrationMessageBuilder<?> messageBuilder = this.messageBuilderFactory.withPayload(payload);
 		@SuppressWarnings("unchecked")
 		Map<String, ?> headers = (Map<String, ?>) map.get("headers");
 		if (headers != null) {
@@ -70,18 +95,13 @@ public class MapMessageConverter implements MessageConverter {
 				headers.keySet().retainAll(Arrays.asList(this.headerNames));
 			}
 			messageBuilder.copyHeaders(headers);
-			/*for (Entry<String, ?> entry : headers.entrySet()) {
-				if (this.filterHeadersInToMessage ? this.headerNames.contains(entry.getKey()) : true) {
-					messageBuilder.setHeader(entry.getKey(), entry.getValue());
-				}
-			}*/
 		}
-		@SuppressWarnings("unchecked")
-		Message<P> convertedMessage = (Message<P>) messageBuilder.build();
+		Message<?> convertedMessage = messageBuilder.build();
 		return convertedMessage;
 	}
 
-	public <P> Object fromMessage(Message<P> message) {
+	@Override
+	public Object fromMessage(Message<?> message, Class<?> clazz) {
 		Map<String,Object> map = new HashMap<String, Object>();
 		map.put("payload", message.getPayload());
 		Map<String, Object> headers = new HashMap<String, Object>();

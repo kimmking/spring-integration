@@ -5,30 +5,47 @@ apply plugin: 'idea'
 
 buildscript {
 	repositories {
-		maven { url 'http://repo.springsource.org/plugins-release' }
+		maven { url 'http://repo.spring.io/plugins-release' }
 	}
 	dependencies {
-		classpath 'org.springframework.build.gradle:docbook-reference-plugin:0.2.7'
+		classpath 'org.springframework.build.gradle:spring-io-plugin:0.0.3.RELEASE'
+		classpath 'org.springframework.build.gradle:docbook-reference-plugin:0.2.8'
 	}
 }
 
 ext {
-	linkHomepage = 'http://www.springintegration.org/'
-	linkCi       = 'https://build.springsource.org/browse/INT'
-	linkIssue    = 'https://jira.springsource.org/browse/INT'
-	linkScmUrl           = 'https://github.com/spring-projects/spring-integration'
-	linkScmConnection    = 'git://github.com/spring-projects/spring-integration.git'
-	linkScmDevConnection = 'git@github.com:spring-projects/spring-integration.git'
+	linkHomepage = 'https://projects.spring.io/spring-integration'
+	linkCi = 'https://build.springsource.org/browse/INT'
+	linkIssue = 'https://jira.springsource.org/browse/INT'
+	linkScmUrl = 'https://github.com/spring-projects/spring-integration'
+	linkScmConnection = 'scm:git:git://github.com/spring-projects/spring-integration.git'
+	linkScmDevConnection = 'scm:git:ssh://git@github.com:spring-projects/spring-integration.git'
 }
 
 allprojects {
 	group = 'org.springframework.integration'
 
 	repositories {
-		maven { url 'http://repo.springsource.org/libs-milestone' }
-		maven { url 'http://repo.springsource.org/plugins-release' }
+		if (version.endsWith('BUILD-SNAPSHOT') || project.hasProperty('platformVersion')) {
+			maven { url 'http://repo.spring.io/libs-snapshot' }
+		}
+		maven { url 'http://repo.spring.io/libs-milestone' }
+		maven { url 'http://repo.spring.io/plugins-release' }
 		mavenCentral()
 	}
+
+	ext.javadocLinks = [
+		'http://docs.oracle.com/javase/7/docs/api/',
+		'http://docs.oracle.com/javaee/6/api/',
+		'http://docs.spring.io/spring/docs/current/javadoc-api/',
+		'http://docs.spring.io/spring-amqp/docs/latest-ga/api/',
+		'http://docs.spring.io/spring-data-gemfire/docs/current/api/',
+		'http://docs.spring.io/spring-data/data-mongo/docs/current/api/',
+		'http://docs.spring.io/spring-data/data-redis/docs/current/api/',
+		'http://docs.spring.io/spring-social-twitter/docs/current/apidocs/',
+		'http://docs.spring.io/spring-ws/sites/2.0/apidocs/'
+	] as String[]
+
 }
 
 subprojects { subproject ->
@@ -38,39 +55,72 @@ subprojects { subproject ->
 	apply plugin: 'eclipse'
 	apply plugin: 'idea'
 
+	if (project.hasProperty('platformVersion')) {
+		apply plugin: 'spring-io'
+
+		dependencies {
+			springIoVersions "io.spring.platform:platform-versions:${platformVersion}@properties"
+		}
+	}
+
 	sourceCompatibility=1.6
 	targetCompatibility=1.6
 
 	ext {
-		aspectjVersion = '1.6.8'
-		cglibVersion = '2.2'
-		commonsNetVersion = '3.0.1'
+		activeMqVersion = '5.9.0'
+		aspectjVersion = '1.8.0'
+		apacheSshdVersion = '0.10.1'
+		commonsDbcpVersion = '1.4'
 		commonsIoVersion = '2.4'
-		derbyVersion = '10.9.1.0'
-		easymockVersion = '2.3'
-		groovyVersion = '2.1.0'
-		hamcrestVersion = '1.3'
-		jacksonVersion = '1.9.2'
-		jackson2Version = '2.2.3'
-		javaxActivationVersion = '1.1.1'
-		junitVersion = '4.11'
-		log4jVersion = '1.2.12'
-		mockitoVersion = '1.9.5'
+		commonsNetVersion = '3.3'
+		httpClientVersion = '3.1'
+		derbyVersion = '10.10.1.1'
+		eclipseLinkVersion = '2.4.2'
 		ftpServerVersion = '1.0.6'
-
-
-		springVersionDefault = '3.1.4.RELEASE'
-		springVersion = project.hasProperty('springVersion') ? getProperty('springVersion') : springVersionDefault
-
-		springAmqpVersion = '1.2.0.RELEASE'
-		springDataMongoVersion = '1.1.1.RELEASE'
-		springDataRedisVersion = '1.1.0.RELEASE'
-		lettuceVersion = '2.3.3'
-		springGemfireVersion = '1.3.1.RELEASE'
-		springSecurityVersion = '3.1.3.RELEASE'
-		springSocialTwitterVersion = '1.0.5.RELEASE'
-		springWsVersion = '2.1.1.RELEASE'
-		springRetryVersion = '1.0.2.RELEASE'
+		groovyVersion = '2.3.1'
+		guavaVersion = '16.0.1'
+		hamcrestVersion = '1.3'
+		hibernateVersion = '4.2.11.Final'
+		hsqldbVersion = '2.3.2'
+		h2Version = '1.3.175'
+		jacksonVersion = '1.9.13'
+		jackson2Version = '2.3.2'
+		javaxActivationVersion = '1.1.1'
+		javaxMailVersion = '1.4.7'
+		jedisVersion = '2.4.2'
+		jmsApiVersion = '1.1-rev-1'
+		jpaApiVersion = '2.0.0'
+		jrubyVersion = '1.7.12'
+		jschVersion = '0.1.51'
+		jsonpathVersion = '0.9.1'
+		junitVersion = '4.11'
+		jythonVersion = '2.5.3'
+		log4jVersion = '1.2.17'
+		mockitoVersion = '1.9.5'
+		mysqlVersion = '5.1.29'
+		openJpaVersion = '2.3.0'
+		pahoMqttClientVersion = '0.4.0'
+		postgresVersion = '9.1-901-1.jdbc4'
+		reactorVersion = '1.1.2.RELEASE'
+		romeToolsVersion = '1.5.0'
+		romeVersion = '1.0.0'
+		saajApiVersion = '1.3.5'
+		saajImplVersion = '1.3.23'
+		servletApiVersion = '3.1.0'
+		slf4jVersion = "1.7.6"
+		smack3Version = '3.2.1'
+		smackVersion = '4.0.0'
+		springAmqpVersion = project.hasProperty('springAmqpVersion') ? project.springAmqpVersion : '1.3.5.RELEASE'
+		springDataMongoVersion = '1.5.0.RELEASE'
+		springDataRedisVersion = '1.3.0.RELEASE'
+		springGemfireVersion = '1.4.0.RELEASE'
+		springSecurityVersion = '3.2.4.RELEASE'
+		springSocialTwitterVersion = '1.1.0.RELEASE'
+		springRetryVersion = '1.1.0.RELEASE'
+		springVersion = project.hasProperty('springVersion') ? project.springVersion : '4.0.6.RELEASE'
+		springWsVersion = '2.2.0.RELEASE'
+		xmlUnitVersion = '1.5'
+		xstreamVersion = '1.4.7'
 	}
 
 	eclipse {
@@ -91,49 +141,28 @@ subprojects { subproject ->
 	// and http://www.gradle.org/docs/current/dsl/org.gradle.api.artifacts.ConfigurationContainer.html
 	configurations {
 		jacoco //Configuration Group used by Sonar to provide Code Coverage using JaCoCo
-		javaAgentSpringInstrument //Configuration Group used by the JPA Adapter during test execution
-		javaAgentOpenJpa //Configuration Group used by the JPA Adapter during test execution
 	}
 
 	// dependencies that are common across all java projects
 	dependencies {
-		testCompile "cglib:cglib-nodep:$cglibVersion"
-		testCompile "junit:junit:$junitVersion"
+		testCompile ("junit:junit:$junitVersion") {
+			exclude group: 'org.hamcrest'
+		}
 		testCompile "log4j:log4j:$log4jVersion"
-		testCompile "org.easymock:easymock:$easymockVersion"
-		testCompile "org.easymock:easymockclassextension:$easymockVersion"
 		testCompile "org.hamcrest:hamcrest-all:$hamcrestVersion"
-		testCompile "org.mockito:mockito-all:$mockitoVersion"
+		testCompile ("org.mockito:mockito-core:$mockitoVersion") {
+			exclude group: 'org.hamcrest'
+		}
 		testCompile "org.springframework:spring-test:$springVersion"
+		if (!(subproject.name ==~ /.*-(core|test)/)) {
+			testCompile project(":spring-integration-test")
+		}
 		jacoco group: "org.jacoco", name: "org.jacoco.agent", version: "0.5.6.201201232323", classifier: "runtime"
 	}
 
 	// enable all compiler warnings; individual projects may customize further
-	ext.xLintArg = '-Xlint:all'
+	ext.xLintArg = '-Xlint:all,-options'
 	[compileJava, compileTestJava]*.options*.compilerArgs = [xLintArg]
-
-	test {
-		// suppress all console output during testing unless running `gradle -i`
-		logging.captureStandardOutput(LogLevel.INFO)
-		jvmArgs "-javaagent:${configurations.jacoco.asPath}=destfile=${buildDir}/jacoco.exec,includes=org.springframework.integration.*"
-	}
-
-	task testAll() {
-		doFirst {
-			tasks.test.systemProperty 'RUN_LONG_INTEGRATION_TESTS', 'true'
-		}
-		finalizedBy test
-	}
-
-	task sourcesJar(type: Jar) {
-		classifier = 'sources'
-		from sourceSets.main.allJava
-	}
-
-	task javadocJar(type: Jar) {
-		classifier = 'javadoc'
-		from javadoc
-	}
 
 	task checkTestConfigs {
 		doLast {
@@ -150,12 +179,37 @@ subprojects { subproject ->
 			if (configFiles) {
 				throw new InvalidUserDataException('Hardcoded XSD version in the config files:\n' +
 						configFiles.collect {relativePath(it)}.join('\n') +
-						'\nPlease, use versionless schemaLocations for Spring XSDs to avoid issues with builds on different versions of dependencies.')
+						'\nPlease, use versionless schemaLocations for Spring XSDs to avoid issues with builds ' +
+						'on different versions of dependencies.')
 			}
 		}
 	}
 
-	test.dependsOn checkTestConfigs
+	test {
+		jvmArgs "-javaagent:${configurations.jacoco.asPath}=destfile=${buildDir}/jacoco.exec,includes=org.springframework.integration.*"
+	}
+
+	task testAll(type: Test)
+
+	tasks.withType(Test).all {
+		// suppress all console output during testing unless running `gradle -i`
+		logging.captureStandardOutput(LogLevel.INFO)
+		dependsOn checkTestConfigs
+
+		if (name ==~ /(springIo.*)|(testAll)/) {
+			systemProperty 'RUN_LONG_INTEGRATION_TESTS', 'true'
+		}
+	}
+
+	task sourcesJar(type: Jar) {
+		classifier = 'sources'
+		from sourceSets.main.allJava
+	}
+
+	task javadocJar(type: Jar) {
+		classifier = 'javadoc'
+		from javadoc
+	}
 
 	artifacts {
 		archives sourcesJar
@@ -171,19 +225,13 @@ project('spring-integration-amqp') {
 		compile "org.springframework:spring-tx:$springVersion"
 		compile("org.springframework.amqp:spring-rabbit:$springAmqpVersion") {
 			exclude group: 'org.springframework', module: 'spring-aop'
-			exclude group: 'org.springframework', module: 'spring-beans'
 			exclude group: 'org.springframework', module: 'spring-context'
 			exclude group: 'org.springframework', module: 'spring-core'
-			exclude group: 'org.springframework', module: 'spring-oxm'
 			exclude group: 'org.springframework', module: 'spring-tx'
 		}
 		testCompile project(":spring-integration-stream")
-		testCompile project(":spring-integration-test")
 		testCompile project(":spring-integration-http") // need to test INT-2713
 	}
-
-	// suppress deprecation warnings (@SuppressWarnings("deprecation") is not enough for javac)
-	compileJava.options.compilerArgs = ["${xLintArg},-deprecation"]
 }
 
 project('spring-integration-core') {
@@ -191,12 +239,15 @@ project('spring-integration-core') {
 	dependencies {
 		compile "org.springframework:spring-aop:$springVersion"
 		compile "org.springframework:spring-context:$springVersion"
+		compile "org.springframework:spring-messaging:$springVersion"
 		compile "org.springframework:spring-tx:$springVersion"
 		compile "org.springframework.retry:spring-retry:$springRetryVersion"
+		compile "org.projectreactor:reactor-core:$reactorVersion"
 		compile("org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion", optional)
 		compile("com.fasterxml.jackson.core:jackson-databind:$jackson2Version", optional)
-		compile('com.jayway.jsonpath:json-path:0.8.1', optional)
-		testCompile "org.aspectj:aspectjweaver:$aspectjVersion"
+		compile("com.jayway.jsonpath:json-path:$jsonpathVersion", optional)
+
+		testCompile ("org.aspectj:aspectjweaver:$aspectjVersion")
 	}
 }
 
@@ -205,7 +256,6 @@ project('spring-integration-event') {
 	dependencies {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-context:$springVersion"
-		testCompile project(":spring-integration-test")
 	}
 }
 
@@ -214,11 +264,10 @@ project('spring-integration-feed') {
 	dependencies {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-context:$springVersion"
-		compile("net.java.dev.rome:rome-fetcher:1.0.0") {
+		compile ("net.java.dev.rome:rome-fetcher:$romeVersion") {
 			exclude group: 'junit', module: 'junit'
 		}
-		compile "net.java.dev.rome:rome:1.0.0"
-		testCompile project(":spring-integration-test")
+		compile "net.java.dev.rome:rome:$romeVersion"
 	}
 }
 
@@ -228,7 +277,10 @@ project('spring-integration-file') {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-context:$springVersion"
 		compile "commons-io:commons-io:$commonsIoVersion"
-		testCompile project(":spring-integration-test")
+		testCompile project(":spring-integration-redis")
+		testCompile project(":spring-integration-redis").sourceSets.test.output
+		testCompile project(":spring-integration-gemfire")
+		testCompile "redis.clients:jedis:$jedisVersion"
 	}
 }
 
@@ -239,27 +291,28 @@ project('spring-integration-ftp') {
 		compile "commons-net:commons-net:$commonsNetVersion"
 		compile "org.springframework:spring-context-support:$springVersion"
 		compile("javax.activation:activation:$javaxActivationVersion", optional)
-		testCompile project(":spring-integration-test")
 		testCompile "org.apache.ftpserver:ftpserver-core:$ftpServerVersion"
 	}
 }
 
 project('spring-integration-gemfire') {
 	description = 'Spring Integration GemFire Support'
-	test {
+	tasks.withType(Test).matching {it.name ==~ /(springIo.+)|(test)|(testAll)/}.all {
 		forkEvery = 1
 		systemProperties['gemfire.disableShutdownHook'] = 'true'
 	}
 	dependencies {
 		compile project(":spring-integration-core")
 		compile ("org.springframework.data:spring-data-gemfire:$springGemfireVersion") {
+			exclude group: 'org.springframework', module: 'spring-aop'
+			exclude group: 'org.springframework', module: 'spring-beans'
+			exclude group: 'org.springframework', module: 'spring-context'
 			exclude group: 'org.springframework', module: 'spring-context-support'
 			exclude group: 'org.springframework', module: 'spring-core'
 			exclude group: 'org.springframework', module: 'spring-tx'
 		}
 		compile "org.springframework:spring-tx:$springVersion"
 		testCompile project(":spring-integration-stream")
-		testCompile project(":spring-integration-test")
 
 	}
 }
@@ -271,7 +324,6 @@ project('spring-integration-groovy') {
 		compile project(":spring-integration-scripting")
 		compile "org.codehaus.groovy:groovy-all:$groovyVersion"
 		compile "org.springframework:spring-context-support:$springVersion"
-		testCompile project(":spring-integration-test")
 		testCompile "org.springframework:spring-web:$springVersion"
 	}
 }
@@ -281,19 +333,16 @@ project('spring-integration-http') {
 	dependencies {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-webmvc:$springVersion"
-
-		compile("javax.servlet:javax.servlet-api:3.0.1", provided)
-
-		compile("commons-httpclient:commons-httpclient:3.1") { dep ->
-			optional dep
+		compile("net.java.dev.rome:rome-fetcher:$romeVersion") {
+			optional
 			exclude group: 'junit', module: 'junit'
 		}
-		compile("net.java.dev.rome:rome-fetcher:1.0.0") { dep ->
-			optional dep
-			exclude group: 'junit', module: 'junit'
-		}
-		compile ("net.java.dev.rome:rome:1.0.0", optional)
-		testCompile project(":spring-integration-test")
+
+		compile("com.rometools:rome:$romeToolsVersion", optional) //For spring-web-4.1
+
+		compile("javax.servlet:javax.servlet-api:$servletApiVersion", provided)
+
+		testCompile "commons-httpclient:commons-httpclient:$httpClientVersion"
 	}
 }
 
@@ -302,8 +351,7 @@ project('spring-integration-ip') {
 	dependencies {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-context:$springVersion"
-		runtime project(":spring-integration-stream")
-		testCompile project(":spring-integration-test")
+		testCompile project(":spring-integration-stream")
 	}
 }
 
@@ -314,20 +362,15 @@ project('spring-integration-jdbc') {
 		compile "org.springframework:spring-aop:$springVersion"
 		compile "org.springframework:spring-jdbc:$springVersion"
 		compile "org.springframework:spring-tx:$springVersion"
-		compile "com.google.guava:guava:12.0"
-		testCompile project(":spring-integration-test")
-		testCompile "com.h2database:h2:1.3.160"
-		testCompile "hsqldb:hsqldb:1.8.0.10"
+		compile "com.google.guava:guava:$guavaVersion"
+		testCompile "com.h2database:h2:$h2Version"
+		testCompile "org.hsqldb:hsqldb:$hsqldbVersion"
 		testCompile "org.apache.derby:derby:$derbyVersion"
 		testCompile "org.apache.derby:derbyclient:$derbyVersion"
 
-		testCompile "org.powermock:powermock-module-junit4:1.5"
-		testCompile "org.powermock:powermock-api-mockito:1.5"
-
-		testCompile "postgresql:postgresql:9.1-901-1.jdbc4"
-		testCompile "mysql:mysql-connector-java:5.1.24"
-		testCompile "commons-dbcp:commons-dbcp:1.4"
-		//testCompile "com.oracle:ojdbc6:11.2.0.3"
+		testCompile "postgresql:postgresql:$postgresVersion"
+		testCompile "mysql:mysql-connector-java:$mysqlVersion"
+		testCompile "commons-dbcp:commons-dbcp:$commonsDbcpVersion"
 
 	}
 
@@ -341,10 +384,10 @@ project('spring-integration-jms') {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-jms:$springVersion"
 		compile "org.springframework:spring-tx:$springVersion"
-		compile ("org.apache.geronimo.specs:geronimo-jms_1.1_spec:1.1", provided)
-		testCompile project(":spring-integration-test")
-		testCompile ("org.apache.activemq:activemq-core:5.6.0") {
-			exclude group: 'org.springframework', module: 'spring-context'
+		compile ("javax.jms:jms-api:$jmsApiVersion", provided)
+		testCompile("org.apache.activemq:activemq-broker:$activeMqVersion")
+		testCompile("org.apache.activemq:activemq-kahadb-store:$activeMqVersion") {
+			exclude group: "org.springframework"
 		}
 		testCompile "org.springframework:spring-oxm:$springVersion"
 	}
@@ -356,7 +399,6 @@ project('spring-integration-jmx') {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-context:$springVersion"
 		testCompile "org.aspectj:aspectjweaver:$aspectjVersion"
-		testCompile project(":spring-integration-test")
 	}
 }
 
@@ -367,28 +409,27 @@ project('spring-integration-jpa') {
 		compile "org.springframework:spring-aop:$springVersion"
 		compile "org.springframework:spring-orm:$springVersion"
 		compile "org.springframework:spring-tx:$springVersion"
-		compile "org.hibernate.javax.persistence:hibernate-jpa-2.0-api:1.0.0.Final"
+		compile "org.eclipse.persistence:javax.persistence:$jpaApiVersion"
 
-		testCompile project(":spring-integration-test")
-		testCompile "com.h2database:h2:1.3.166"
-		testCompile "hsqldb:hsqldb:1.8.0.10"
+		testCompile "com.h2database:h2:$h2Version"
+		testCompile "org.hsqldb:hsqldb:$hsqldbVersion"
 		testCompile "org.apache.derby:derby:$derbyVersion"
 
-		testCompile "org.hibernate:hibernate-entitymanager:3.6.10.Final"
-		testCompile "org.eclipse.persistence:org.eclipse.persistence.jpa:2.3.2"
-		testCompile "org.apache.openjpa:openjpa:2.2.0"
+		testCompile "org.hibernate:hibernate-entitymanager:$hibernateVersion"
 
-		javaAgentSpringInstrument "org.springframework:spring-instrument:$springVersion"
-		javaAgentOpenJpa "org.apache.openjpa:openjpa:2.2.0"
+		testCompile ("org.apache.openjpa:openjpa:$openJpaVersion") {
+			exclude group: 'org.apache.geronimo.specs'
+		}
 
-		//Suppress openjpa annotation processor warnings
-		compileTestJava.options.compilerArgs = ["${xLintArg},-processing"]
+		testRuntime "org.eclipse.persistence:org.eclipse.persistence.jpa:$eclipseLinkVersion"
+		testRuntime "org.springframework:spring-instrument:$springVersion"
 	}
 
-	test.doFirst {
-		String jvmArgsSpringIntrument = "-javaagent:${configurations.javaAgentSpringInstrument.files.iterator().next()}"
-		String jvmArgsOpenJpa         = "-javaagent:${configurations.javaAgentOpenJpa.files.iterator().next()}"
-		jvmArgs jvmArgsSpringIntrument , jvmArgsOpenJpa
+	//Suppress openjpa annotation processor warnings
+	compileTestJava.options.compilerArgs = ["${xLintArg},-processing"]
+
+	tasks.withType(Test).matching {it.name ==~ /(springIo.+)|(test)|(testAll)/}.all {
+		jvmArgs classpath.files.findAll{it.name ==~ /(spring-instrument.+)|(openjpa.+)/}.collect{"-javaagent:$it"}
 	}
 
 }
@@ -398,9 +439,10 @@ project('spring-integration-mail') {
 	dependencies {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-context-support:$springVersion"
-		compile("javax.mail:mail:1.4.7", provided)
+		compile("javax.mail:javax.mail-api:$javaxMailVersion", provided)
+		compile("com.sun.mail:imap:$javaxMailVersion", provided)
 		compile("javax.activation:activation:$javaxActivationVersion", optional)
-		testCompile project(":spring-integration-test")
+		testRuntime "com.sun.mail:mailapi:$javaxMailVersion"
 	}
 
 	// suppress javax.activation path warnings
@@ -413,15 +455,20 @@ project('spring-integration-mongodb') {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-tx:$springVersion"
 		compile("org.springframework.data:spring-data-mongodb:$springDataMongoVersion") {
-			exclude group: 'org.springframework', module: 'spring-aop'
-			exclude group: 'org.springframework', module: 'spring-asm'
 			exclude group: 'org.springframework', module: 'spring-beans'
 			exclude group: 'org.springframework', module: 'spring-context'
 			exclude group: 'org.springframework', module: 'spring-core'
 			exclude group: 'org.springframework', module: 'spring-expression'
 			exclude group: 'org.springframework', module: 'spring-tx'
 		}
-		testCompile project(":spring-integration-test")
+	}
+}
+
+project('spring-integration-mqtt') {
+	description = 'Spring Integration MQTT Support'
+	dependencies {
+		compile project(":spring-integration-core")
+		compile "org.eclipse.paho:mqtt-client:$pahoMqttClientVersion"
 	}
 }
 
@@ -431,13 +478,14 @@ project('spring-integration-redis') {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-tx:$springVersion"
 		compile ("org.springframework.data:spring-data-redis:$springDataRedisVersion") {
-			exclude group: 'org.springframework', module: 'spring-core'
-			exclude group: 'org.springframework', module: 'spring-context-support'
 			exclude group: 'org.springframework', module: 'spring-beans'
+			exclude group: 'org.springframework', module: 'spring-context'
+			exclude group: 'org.springframework', module: 'spring-context-support'
+			exclude group: 'org.springframework', module: 'spring-core'
 			exclude group: 'org.springframework', module: 'spring-tx'
 		}
-		testCompile project(":spring-integration-test")
-		testCompile "com.lambdaworks:lettuce:$lettuceVersion"
+		testCompile "redis.clients:jedis:$jedisVersion"
+		testCompile "org.slf4j:slf4j-log4j12:$slf4jVersion"
 	}
 }
 
@@ -447,21 +495,16 @@ project('spring-integration-rmi') {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-aop:$springVersion"
 		compile "org.springframework:spring-context:$springVersion"
-		testCompile project(":spring-integration-test")
 	}
-
-	// suppress deprecation warnings (@SuppressWarnings("deprecation") is not enough for javac)
-	compileJava.options.compilerArgs = ["${xLintArg},-deprecation"]
 }
 
 project('spring-integration-scripting') {
 	description = 'Spring Integration Scripting Support'
 	dependencies {
 		compile project(":spring-integration-core")
-		testCompile project(":spring-integration-test")
-		testCompile("org.jruby:jruby:1.6.3")
+		testCompile("org.jruby:jruby:$jrubyVersion")
 		testCompile("org.codehaus.groovy:groovy-all:$groovyVersion")
-		testCompile("org.python:jython-standalone:2.5.2")
+		testCompile("org.python:jython-standalone:$jythonVersion")
 	}
 }
 
@@ -486,10 +529,10 @@ project('spring-integration-sftp') {
 		compile project(":spring-integration-core")
 		compile project(":spring-integration-file")
 		compile project(":spring-integration-stream")
-		compile "com.jcraft:jsch:0.1.49"
+		compile "com.jcraft:jsch:$jschVersion"
 		compile "org.springframework:spring-context-support:$springVersion"
 		compile("javax.activation:activation:$javaxActivationVersion", optional)
-		testCompile project(":spring-integration-test")
+		testCompile "org.apache.sshd:sshd-core:$apacheSshdVersion"
 	}
 }
 
@@ -498,7 +541,6 @@ project('spring-integration-stream') {
 	dependencies {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-context:$springVersion"
-		testCompile project(":spring-integration-test")
 	}
 }
 
@@ -506,7 +548,6 @@ project('spring-integration-syslog') {
 	description = 'Spring Integration Syslog Support'
 	dependencies {
 		compile project(":spring-integration-ip")
-		testCompile project(":spring-integration-test")
 	}
 }
 
@@ -514,9 +555,13 @@ project('spring-integration-test') {
 	description = 'Spring Integration Test Support'
 	dependencies {
 		compile project(":spring-integration-core")
-		compile "junit:junit:$junitVersion"
+		compile ("junit:junit:$junitVersion") {
+			exclude group: 'org.hamcrest', module: 'hamcrest-core'
+		}
 		compile "org.hamcrest:hamcrest-all:$hamcrestVersion"
-		compile "org.mockito:mockito-core:$mockitoVersion"
+		compile ("org.mockito:mockito-core:$mockitoVersion") {
+			exclude group: 'org.hamcrest', module: 'hamcrest-core'
+		}
 		compile "org.springframework:spring-context:$springVersion"
 		compile "org.springframework:spring-test:$springVersion"
 	}
@@ -528,19 +573,26 @@ project('spring-integration-twitter') {
 		compile project(":spring-integration-core")
 		compile "org.springframework:spring-web:$springVersion"
 		compile("org.springframework.social:spring-social-twitter:$springSocialTwitterVersion") {
-			exclude group: 'org.springframework', module: 'spring-aop'
-			exclude group: 'org.springframework', module: 'spring-asm'
 			exclude group: 'org.springframework', module: 'spring-beans'
 			exclude group: 'org.springframework', module: 'spring-context'
 			exclude group: 'org.springframework', module: 'spring-core'
 			exclude group: 'org.springframework', module: 'spring-expression'
 			exclude group: 'org.springframework', module: 'spring-web'
+			exclude group: 'org.springframework', module: 'spring-webmvc'
+
 		}
 		compile("javax.activation:activation:$javaxActivationVersion", optional)
-		testCompile project(":spring-integration-test")
 		testCompile project(":spring-integration-redis")
 		testCompile project(":spring-integration-redis").sourceSets.test.output
-		testCompile "com.lambdaworks:lettuce:$lettuceVersion"
+		testCompile "redis.clients:jedis:$jedisVersion"
+	}
+}
+
+project('spring-integration-websocket') {
+	description = 'Spring Integration WebSockets Support'
+	dependencies {
+		compile project(":spring-integration-core")
+		compile "org.springframework:spring-websocket:$springVersion"
 	}
 }
 
@@ -552,29 +604,32 @@ project('spring-integration-ws') {
 		compile "org.springframework:spring-oxm:$springVersion"
 		compile "org.springframework:spring-webmvc:$springVersion"
 		compile ("org.springframework.ws:spring-ws-core:$springWsVersion") {
-			exclude group: 'org.springframework', module: 'spring-webmvc'
+			exclude group: 'org.springframework', module: 'spring-aop'
+			exclude group: 'org.springframework', module: 'spring-beans'
+			exclude group: 'org.springframework', module: 'spring-context'
+			exclude group: 'org.springframework', module: 'spring-core'
+			exclude group: 'org.springframework', module: 'spring-oxm'
 			exclude group: 'org.springframework', module: 'spring-web'
-			exclude group: 'org.springframework', module: 'spring-context-support'
+			exclude group: 'org.springframework', module: 'spring-webmvc'
 		}
-		compile("javax.xml.soap:saaj-api:1.3") { dep ->
+		compile("javax.xml.soap:saaj-api:$saajApiVersion") { dep ->
 			optional dep
 			exclude group: 'javax.activation', module: 'activation'
 		}
-		compile("com.sun.xml.messaging.saaj:saaj-impl:1.3", optional)
+		compile("com.sun.xml.messaging.saaj:saaj-impl:$saajImplVersion", optional)
 		compile("javax.activation:activation:$javaxActivationVersion", optional)
-		testCompile project(":spring-integration-test")
-		testCompile "stax:stax-api:1.0.1"
-		testCompile 'com.thoughtworks.xstream:xstream:1.4.4'
+		testCompile "com.thoughtworks.xstream:xstream:$xstreamVersion"
 		testCompile ("org.springframework.ws:spring-ws-support:$springWsVersion") {
 			exclude group: 'org.springframework'
 		}
 		testCompile ("org.springframework:spring-jms:$springVersion") {
 			exclude group: 'org.springframework'
 		}
-		testCompile "org.apache.geronimo.specs:geronimo-jms_1.1_spec:1.1"
-		testCompile "org.igniterealtime.smack:smack:3.2.1"
-		testCompile "org.igniterealtime.smack:smackx:3.2.1"
-		testCompile "javax.mail:mail:1.4.5"
+		testCompile "javax.jms:jms-api:$jmsApiVersion"
+		testCompile "org.igniterealtime.smack:smack:$smack3Version"
+		testCompile "org.igniterealtime.smack:smackx:$smack3Version"
+		testCompile "javax.mail:javax.mail-api:$javaxMailVersion"
+		testRuntime "com.sun.mail:mailapi:$javaxMailVersion"
 	}
 
 	// suppress saaj path warnings
@@ -589,11 +644,11 @@ project('spring-integration-xml') {
 		compile "org.springframework:spring-oxm:$springVersion"
 		compile ("org.springframework.ws:spring-xml:$springWsVersion") {
 			exclude group: 'org.springframework', module: 'spring-beans'
+			exclude group: 'org.springframework', module: 'spring-context'
 			exclude group: 'org.springframework', module: 'spring-core'
 		}
 		compile("javax.activation:activation:$javaxActivationVersion", optional)
-		testCompile project(":spring-integration-test")
-		testCompile "xmlunit:xmlunit:1.3"
+		testCompile "xmlunit:xmlunit:$xmlUnitVersion"
 	}
 }
 
@@ -602,15 +657,47 @@ project('spring-integration-xmpp') {
 	dependencies {
 		compile project(":spring-integration-core")
 		compile("javax.activation:activation:$javaxActivationVersion", optional)
-		compile "org.igniterealtime.smack:smack:3.2.1"
-		compile "org.igniterealtime.smack:smackx:3.2.1"
+		compile "org.igniterealtime.smack:smack-tcp:$smackVersion"
+		compile "org.igniterealtime.smack:smack-resolver-javax:$smackVersion"
+		compile "org.igniterealtime.smack:smack-extensions:$smackVersion"
 		compile "org.springframework:spring-context-support:$springVersion"
-		testCompile project(":spring-integration-test")
 		testCompile project(":spring-integration-stream")
 	}
+}
 
-	// suppress smack path warnings
-	[compileJava,compileTestJava]*.options*.compilerArgs = ["${xLintArg},-path"]
+project("spring-integration-bom") {
+	description = "Spring Integration (Bill of Materials)"
+
+	configurations.archives.artifacts.clear()
+	artifacts {
+		// work around GRADLE-2406 by attaching text artifact
+		archives(file("spring-integration-bom.txt"))
+	}
+
+	install {
+		repositories.mavenInstaller {
+			pom.whenConfigured {
+				packaging = "pom"
+				withXml {
+					asNode().children().last() + {
+						delegate.dependencyManagement {
+							delegate.dependencies {
+								parent.subprojects.sort { "$it.name" }.each { p ->
+									if (p != project) {
+										delegate.dependency {
+											delegate.groupId(p.group)
+											delegate.artifactId(p.name)
+											delegate.version(p.version)
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 apply plugin: 'docbook-reference'
@@ -642,6 +729,7 @@ task api(type: Javadoc) {
 	options.header = rootProject.description
 	options.overview = 'src/api/overview.html'
 	options.stylesheetFile = file("src/api/stylesheet.css")
+	options.links(project.ext.javadocLinks)
 	source subprojects.collect { project ->
 		project.sourceSets.main.allJava
 	}
@@ -657,6 +745,8 @@ task schemaZip(type: Zip) {
 	description = "Builds -${classifier} archive containing all " +
 		"XSDs for deployment at static.springframework.org/schema."
 
+	duplicatesStrategy = 'exclude'
+
 	subprojects.each { subproject ->
 		def Properties schemas = new Properties();
 		def shortName = subproject.name.replaceFirst("${rootProject.name}-", '')
@@ -665,12 +755,12 @@ task schemaZip(type: Zip) {
 		}
 
 		subproject.sourceSets.main.resources.find {
-			it.path.endsWith('META-INF/spring.schemas')
+			it.path.endsWith("META-INF${File.separator}spring.schemas")
 		}?.withInputStream { schemas.load(it) }
 
 		for (def key : schemas.keySet()) {
 			File xsdFile = subproject.sourceSets.main.resources.find {
-				it.path.endsWith(schemas.get(key))
+				it.path.replaceAll('\\\\', '/').endsWith(schemas.get(key))
 			}
 			assert xsdFile != null
 			into ("integration/${shortName}") {
@@ -774,5 +864,6 @@ task dist(dependsOn: assemble) {
 
 task wrapper(type: Wrapper) {
 	description = 'Generates gradlew[.bat] scripts'
-	gradleVersion = '1.7'
+	gradleVersion = '1.12'
+	distributionUrl = "http://services.gradle.org/distributions/gradle-${gradleVersion}-all.zip"
 }

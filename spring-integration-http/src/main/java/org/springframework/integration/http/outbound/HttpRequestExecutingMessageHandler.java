@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import java.util.Map;
 import javax.xml.transform.Source;
 
 import org.springframework.beans.factory.BeanFactory;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.core.convert.converter.ConverterRegistry;
@@ -44,16 +45,16 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.converter.HttpMessageConverter;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHandlingException;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageHandler;
 import org.springframework.integration.expression.ExpressionEvalMap;
 import org.springframework.integration.expression.ExpressionUtils;
 import org.springframework.integration.handler.AbstractReplyProducingMessageHandler;
 import org.springframework.integration.http.support.DefaultHttpHeaderMapper;
 import org.springframework.integration.mapping.HeaderMapper;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessageHandlingException;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
@@ -111,8 +112,14 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 
 	private volatile HeaderMapper<HttpHeaders> headerMapper = DefaultHttpHeaderMapper.outboundMapper();
 
+	private volatile Expression uriVariablesExpression;
+
+
+
 	/**
 	 * Create a handler that will send requests to the provided URI.
+	 *
+	 * @param uri The URI.
 	 */
 	public HttpRequestExecutingMessageHandler(URI uri) {
 		this(uri.toString());
@@ -120,6 +127,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 
 	/**
 	 * Create a handler that will send requests to the provided URI.
+	 *
+	 * @param uri The URI.
 	 */
 	public HttpRequestExecutingMessageHandler(String uri) {
 		this(uri, null);
@@ -127,6 +136,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 
 	/**
 	 * Create a handler that will send requests to the provided URI Expression.
+	 *
+	 * @param uriExpression The URI expression.
 	 */
 	public HttpRequestExecutingMessageHandler(Expression uriExpression) {
 		this(uriExpression, null);
@@ -134,8 +145,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 
 	/**
 	 * Create a handler that will send requests to the provided URI using a provided RestTemplate
-	 * @param uri
-	 * @param restTemplate
+	 * @param uri The URI.
+	 * @param restTemplate The rest template.
 	 */
 	public HttpRequestExecutingMessageHandler(String uri, RestTemplate restTemplate) {
 		this(new LiteralExpression(uri), restTemplate);
@@ -151,7 +162,7 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	 * Create a handler that will send requests to the provided URI using a provided RestTemplate
 	 * @param uriExpression A SpEL Expression that can be resolved against the message object and
 	 * {@link BeanFactory}.
-	 * @param restTemplate
+	 * @param restTemplate The rest template.
 	 */
 	public HttpRequestExecutingMessageHandler(Expression uriExpression, RestTemplate restTemplate) {
 		Assert.notNull(uriExpression, "URI Expression is required");
@@ -163,6 +174,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	 * Specify whether the real URI should be encoded after <code>uriVariables</code>
 	 * expanding and before send request via {@link RestTemplate}. The default value is <code>true</code>.
 	 *
+	 * @param encodeUri true if the URI should be encoded.
+	 *
 	 * @see UriComponentsBuilder
 	 */
 	public void setEncodeUri(boolean encodeUri) {
@@ -172,7 +185,7 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	/**
 	 * Specify the SpEL {@link Expression} to determine {@link HttpMethod} dynamically
 	 *
-	 * @param httpMethodExpression
+	 * @param httpMethodExpression The method expression.
 	 */
 	public void setHttpMethodExpression(Expression httpMethodExpression) {
 		Assert.notNull(httpMethodExpression, "'httpMethodExpression' must not be null");
@@ -181,6 +194,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 
 	/**
 	 * Specify the {@link HttpMethod} for requests. The default method will be POST.
+	 *
+	 * @param httpMethod The method.
 	 */
 	public void setHttpMethod(HttpMethod httpMethod) {
 		this.httpMethodExpression = new LiteralExpression(httpMethod.name());
@@ -190,6 +205,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	 * Specify whether the outbound message's payload should be extracted
 	 * when preparing the request body. Otherwise the Message instance itself
 	 * will be serialized. The default value is <code>true</code>.
+	 *
+	 * @param extractPayload true if the payload should be extracted.
 	 */
 	public void setExtractPayload(boolean extractPayload) {
 		this.extractPayload = extractPayload;
@@ -199,6 +216,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	/**
 	 * Specify the charset name to use for converting String-typed payloads to
 	 * bytes. The default is 'UTF-8'.
+	 *
+	 * @param charset The charset.
 	 */
 	public void setCharset(String charset) {
 		Assert.isTrue(Charset.isSupported(charset), "unsupported charset '" + charset + "'");
@@ -208,6 +227,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	/**
 	 * Specify whether a reply Message is expected. If not, this handler will simply return null for a
 	 * successful response or throw an Exception for a non-successful response. The default is true.
+	 *
+	 * @param expectReply true if a reply is expected.
 	 */
 	public void setExpectReply(boolean expectReply) {
 		this.expectReply = expectReply;
@@ -219,6 +240,9 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	 * be returned as a payload of the reply Message.
 	 * To take advantage of the HttpMessageConverters
 	 * registered on this adapter, provide a different type).
+	 *
+	 * @param expectedResponseType The expected type.
+	 *
 	 * Also see {@link #setExpectedResponseTypeExpression(Expression)}
 	 */
 	public void setExpectedResponseType(Class<?> expectedResponseType) {
@@ -230,6 +254,9 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	 * Specify the {@link Expression} to determine the type for the expected response
 	 * The returned value of the expression could be an instance of {@link Class} or
 	 * {@link String} representing a fully qualified class name
+	 *
+	 * @param expectedResponseTypeExpression The expected response type expression.
+	 *
 	 * Also see {@link #setExpectedResponseTypeExpression(Expression)}
 	 */
 	public void setExpectedResponseTypeExpression(Expression expectedResponseTypeExpression) {
@@ -238,6 +265,9 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 
 	/**
 	 * Set the {@link ResponseErrorHandler} for the underlying {@link RestTemplate}.
+	 *
+	 * @param errorHandler The error handler.
+	 *
 	 * @see RestTemplate#setErrorHandler(ResponseErrorHandler)
 	 */
 	public void setErrorHandler(ResponseErrorHandler errorHandler) {
@@ -247,6 +277,9 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	/**
 	 * Set a list of {@link HttpMessageConverter}s to be used by the underlying {@link RestTemplate}.
 	 * Converters configured via this method will override the default converters.
+	 *
+	 * @param messageConverters The message converters.
+	 *
 	 * @see RestTemplate#setMessageConverters(java.util.List)
 	 */
 	public void setMessageConverters(List<HttpMessageConverter<?>> messageConverters) {
@@ -254,6 +287,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	}
 
 	/**
+	 * @param headerMapper The header mapper.
+	 *
 	 * Set the {@link HeaderMapper} to use when mapping between HTTP headers and MessageHeaders.
 	 */
 	public void setHeaderMapper(HeaderMapper<HttpHeaders> headerMapper) {
@@ -263,6 +298,9 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 
 	/**
 	 * Set the {@link ClientHttpRequestFactory} for the underlying {@link RestTemplate}.
+	 *
+	 * @param requestFactory The request factory.
+	 *
 	 * @see RestTemplate#setRequestFactory(ClientHttpRequestFactory)
 	 */
 	public void setRequestFactory(ClientHttpRequestFactory requestFactory) {
@@ -272,6 +310,8 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	/**
 	 * Set the Map of URI variable expressions to evaluate against the outbound message
 	 * when replacing the variable placeholders in a URI template.
+	 *
+	 * @param uriVariableExpressions The URI variable expressions.
 	 */
 	public void setUriVariableExpressions(Map<String, Expression> uriVariableExpressions) {
 		synchronized (this.uriVariableExpressions) {
@@ -281,13 +321,30 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	}
 
 	/**
+	 * Set the {@link Expression} to evaluate against the outbound message; the expression
+	 * must evaluate to a Map of URI variable expressions to evaluate against the outbound message
+	 * when replacing the variable placeholders in a URI template.
+	 *
+	 * @param uriVariablesExpression The URI variables expression.
+	 */
+	public void setUriVariablesExpression(Expression uriVariablesExpression) {
+		this.uriVariablesExpression = uriVariablesExpression;
+	}
+
+	/**
 	 * Set to true if you wish 'Set-Cookie' headers in responses to be
 	 * transferred as 'Cookie' headers in subsequent interactions for
 	 * a message.
+	 *
 	 * @param transferCookies the transferCookies to set.
 	 */
 	public void setTransferCookies(boolean transferCookies) {
 		this.transferCookies = transferCookies;
+	}
+
+	@Override
+	public String getComponentType() {
+		return (this.expectReply ? "http:outbound-gateway" : "http:outbound-channel-adapter");
 	}
 
 	@Override
@@ -314,6 +371,7 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	}
 
 	private class ClassToStringConverter implements Converter<Class<?>, String> {
+		@Override
 		public String convert(Class<?> source) {
 			return source.getName();
 		}
@@ -326,6 +384,7 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 	 *
 	 */
 	private class ObjectToStringConverter implements Converter<Object, String> {
+		@Override
 		public String convert(Object source) {
 			if (source instanceof Class) {
 				return ((Class<?>) source).getName();
@@ -348,32 +407,34 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 				}
 			}
 
-			Class<?> expectedResponseType = this.determineExpectedResponseType(requestMessage);
+			Object expectedResponseType = this.determineExpectedResponseType(requestMessage);
 
 			HttpEntity<?> httpRequest = this.generateHttpRequest(requestMessage, httpMethod);
-			Map<String, Object> uriVariables = ExpressionEvalMap
-					.from(this.uriVariableExpressions)
-					.usingEvaluationContext(this.evaluationContext)
-					.withRoot(requestMessage)
-					.build();
+			Map<String, ?> uriVariables = this.determineUriVariables(requestMessage);
 			UriComponents uriComponents = UriComponentsBuilder.fromUriString(uri).buildAndExpand(uriVariables);
 			URI realUri = this.encodeUri ? uriComponents.toUri() : new URI(uriComponents.toUriString());
-			ResponseEntity<?> httpResponse = this.restTemplate.exchange(realUri, httpMethod, httpRequest, expectedResponseType);
+			ResponseEntity<?> httpResponse;
+			if (expectedResponseType instanceof ParameterizedTypeReference<?>) {
+				httpResponse = this.restTemplate.exchange(realUri, httpMethod, httpRequest, (ParameterizedTypeReference<?>) expectedResponseType);
+			}
+			else {
+				httpResponse = this.restTemplate.exchange(realUri, httpMethod, httpRequest, (Class<?>) expectedResponseType);
+			}
 			if (this.expectReply) {
 				HttpHeaders httpHeaders = httpResponse.getHeaders();
 				Map<String, Object> headers = this.headerMapper.toHeaders(httpHeaders);
 				if (this.transferCookies) {
 					this.doConvertSetCookie(headers);
 				}
-				MessageBuilder<?> replyBuilder = null;
+				AbstractIntegrationMessageBuilder<?> replyBuilder = null;
 				if (httpResponse.hasBody()) {
 					Object responseBody = httpResponse.getBody();
 					replyBuilder = (responseBody instanceof Message<?>) ?
-							MessageBuilder.fromMessage((Message<?>) responseBody) : MessageBuilder.withPayload(responseBody);
+							this.getMessageBuilderFactory().fromMessage((Message<?>) responseBody) : this.getMessageBuilderFactory().withPayload(responseBody);
 
 				}
 				else {
-					replyBuilder = MessageBuilder.withPayload(httpResponse);
+					replyBuilder = this.getMessageBuilderFactory().withPayload(httpResponse);
 				}
 				replyBuilder.setHeader(org.springframework.integration.http.HttpHeaders.STATUS_CODE, httpResponse.getStatusCode());
 				return replyBuilder.copyHeaders(headers).build();
@@ -554,17 +615,38 @@ public class HttpRequestExecutingMessageHandler extends AbstractReplyProducingMe
 		return HttpMethod.valueOf(strHttpMethod);
 	}
 
-
-	private Class<?> determineExpectedResponseType(Message<?> requestMessage) throws Exception{
-		Class<?> expectedResponseType = null;
-		String expectedResponseTypeName = null;
+	private Object determineExpectedResponseType(Message<?> requestMessage) throws Exception{
+		Object expectedResponseType = null;
 		if (this.expectedResponseTypeExpression != null){
-			expectedResponseTypeName = this.expectedResponseTypeExpression.getValue(this.evaluationContext, requestMessage, String.class);
+			expectedResponseType = this.expectedResponseTypeExpression.getValue(this.evaluationContext, requestMessage);
 		}
-		if (StringUtils.hasText(expectedResponseTypeName)){
-			expectedResponseType = ClassUtils.forName(expectedResponseTypeName, ClassUtils.getDefaultClassLoader());
+		if (expectedResponseType != null) {
+			Assert.isTrue(expectedResponseType instanceof Class<?>
+					|| expectedResponseType instanceof String
+					|| expectedResponseType instanceof ParameterizedTypeReference,
+					"'expectedResponseType' can be an instance of 'Class<?>', 'String' or 'ParameterizedTypeReference<?>'.");
+			if (expectedResponseType instanceof String && StringUtils.hasText((String) expectedResponseType)){
+				expectedResponseType = ClassUtils.forName((String) expectedResponseType, ClassUtils.getDefaultClassLoader());
+			}
 		}
 		return expectedResponseType;
+	}
+
+	@SuppressWarnings("unchecked")
+	private Map<String, ?> determineUriVariables(Message<?> requestMessage) {
+		Map<String, ?> expressions;
+
+		if (this.uriVariablesExpression != null) {
+			expressions = this.uriVariablesExpression.getValue(this.evaluationContext, requestMessage, Map.class);
+		}
+		else {
+			expressions = this.uriVariableExpressions;
+		}
+
+		return ExpressionEvalMap.from(expressions)
+					.usingEvaluationContext(this.evaluationContext)
+					.withRoot(requestMessage)
+					.build();
 
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,12 +36,15 @@ import org.springframework.expression.ParseException;
 import org.springframework.expression.spel.SpelParserConfiguration;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.core.MessagingTemplate;
 import org.springframework.integration.expression.ExpressionUtils;
-import org.springframework.integration.support.MessageBuilder;
-import org.springframework.integration.support.channel.ChannelResolver;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.core.DestinationResolver;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -52,6 +55,8 @@ import org.springframework.util.StringUtils;
  * responsibility of the EL expression provided by the {@link PublisherMetadataSource}.
  *
  * @author Mark Fisher
+ * @author Artem Bilan
+ * @author Gary Russell
  * @since 2.0
  */
 public class MessagePublishingInterceptor implements MethodInterceptor, BeanFactoryAware {
@@ -62,12 +67,15 @@ public class MessagePublishingInterceptor implements MethodInterceptor, BeanFact
 
 	private final ExpressionParser parser = new SpelExpressionParser(new SpelParserConfiguration(true, true));
 
-	private volatile ChannelResolver channelResolver;
+	private volatile DestinationResolver<MessageChannel> channelResolver;
 
 	private volatile BeanFactory beanFactory;
 
 	private final ParameterNameDiscoverer parameterNameDiscoverer = new LocalVariableTableParameterNameDiscoverer();
 
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
+	private volatile String defaultChannelName;
 
 	public MessagePublishingInterceptor(PublisherMetadataSource metadataSource) {
 		Assert.notNull(metadataSource, "metadataSource must not be null");
@@ -80,19 +88,36 @@ public class MessagePublishingInterceptor implements MethodInterceptor, BeanFact
 		this.metadataSource = metadataSource;
 	}
 
+	/**
+	 * @deprecated Use {@link #setDefaultChannelName(String)}.
+	 * @param defaultChannel the default channel.
+	 */
+	@Deprecated
 	public void setDefaultChannel(MessageChannel defaultChannel) {
-		this.messagingTemplate.setDefaultChannel(defaultChannel);
+		this.messagingTemplate.setDefaultDestination(defaultChannel);
+		this.defaultChannelName = null;
 	}
 
-	public void setChannelResolver(ChannelResolver channelResolver) {
+	/**
+	 * @param defaultChannelName the default channel name.
+	 * @since 4.0.3
+	 */
+	public void setDefaultChannelName(String defaultChannelName) {
+		this.defaultChannelName = defaultChannelName;
+	}
+
+	public void setChannelResolver(DestinationResolver<MessageChannel> channelResolver) {
 		this.channelResolver = channelResolver;
 	}
 
 	@Override
 	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
 		this.beanFactory = beanFactory;
+		this.messagingTemplate.setBeanFactory(beanFactory);
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(beanFactory);
 	}
 
+	@Override
 	public final Object invoke(final MethodInvocation invocation) throws Throwable {
 		Assert.notNull(this.metadataSource, "PublisherMetadataSource is required.");
 		final StandardEvaluationContext context = ExpressionUtils.createStandardEvaluationContext(this.beanFactory);
@@ -138,9 +163,9 @@ public class MessagePublishingInterceptor implements MethodInterceptor, BeanFact
 		Expression expression = this.parser.parseExpression(payloadExpressionString);
 		Object result = expression.getValue(context);
 		if (result != null) {
-			MessageBuilder<?> builder = (result instanceof Message<?>)
-					? MessageBuilder.fromMessage((Message<?>) result)
-					: MessageBuilder.withPayload(result);
+			AbstractIntegrationMessageBuilder<?> builder = (result instanceof Message<?>)
+					? this.messageBuilderFactory.fromMessage((Message<?>) result)
+					: this.messageBuilderFactory.withPayload(result);
 			Map<String, Object> headers = this.evaluateHeaders(method, context);
 			if (headers != null) {
 				builder.copyHeaders(headers);
@@ -150,12 +175,23 @@ public class MessagePublishingInterceptor implements MethodInterceptor, BeanFact
 			MessageChannel channel = null;
 			if (channelName != null) {
 				Assert.state(this.channelResolver != null, "ChannelResolver is required to resolve channel names.");
-				channel = this.channelResolver.resolveChannelName(channelName);
+				channel = this.channelResolver.resolveDestination(channelName);
 			}
 			if (channel != null) {
 				this.messagingTemplate.send(channel, message);
 			}
 			else {
+				if (this.defaultChannelName != null) {
+					synchronized(this) {
+						if (this.defaultChannelName != null && this.messagingTemplate.getDefaultDestination() == null) {
+							Assert.state(this.channelResolver != null,
+									"ChannelResolver is required to resolve channel names.");
+							this.messagingTemplate.setDefaultChannel(
+									this.channelResolver.resolveDestination(this.defaultChannelName));
+						}
+						this.defaultChannelName = null;
+					}
+				}
 				this.messagingTemplate.send(message);
 			}
 		}

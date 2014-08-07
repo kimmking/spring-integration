@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.integration.channel;
 
+import org.springframework.integration.context.IntegrationProperties;
 import org.springframework.integration.dispatcher.LoadBalancingStrategy;
 import org.springframework.integration.dispatcher.RoundRobinLoadBalancingStrategy;
 import org.springframework.integration.dispatcher.UnicastingDispatcher;
@@ -34,6 +35,8 @@ public class DirectChannel extends AbstractSubscribableChannel {
 
 	private final UnicastingDispatcher dispatcher = new UnicastingDispatcher();
 
+	private volatile Integer maxSubscribers;
+
 	/**
 	 * Create a channel with default {@link RoundRobinLoadBalancingStrategy}
 	 */
@@ -44,6 +47,8 @@ public class DirectChannel extends AbstractSubscribableChannel {
 	/**
 	 * Create a DirectChannel with a {@link LoadBalancingStrategy}. The
 	 * strategy <em>must not</em> be null.
+	 *
+	 * @param loadBalancingStrategy The load balancing strategy implementation.
 	 */
 	public DirectChannel(LoadBalancingStrategy loadBalancingStrategy) {
 		this.dispatcher.setLoadBalancingStrategy(loadBalancingStrategy);
@@ -53,6 +58,8 @@ public class DirectChannel extends AbstractSubscribableChannel {
 	/**
 	 * Specify whether the channel's dispatcher should have failover enabled.
 	 * By default, it will. Set this value to 'false' to disable it.
+	 *
+	 * @param failover The failover boolean.
 	 */
 	public void setFailover(boolean failover) {
 		this.dispatcher.setFailover(failover);
@@ -61,15 +68,26 @@ public class DirectChannel extends AbstractSubscribableChannel {
 	/**
 	 * Specify the maximum number of subscribers supported by the
 	 * channel's dispatcher.
-	 * @param maxSubscribers
+	 *
+	 * @param maxSubscribers The maximum number of subscribers allowed.
 	 */
 	public void setMaxSubscribers(int maxSubscribers) {
+		this.maxSubscribers = maxSubscribers;
 		this.dispatcher.setMaxSubscribers(maxSubscribers);
 	}
 
 	@Override
 	protected UnicastingDispatcher getDispatcher() {
 		return this.dispatcher;
+	}
+
+	@Override
+	protected void onInit() throws Exception {
+		super.onInit();
+		if (this.maxSubscribers == null) {
+			Integer maxSubscribers = this.getIntegrationProperty(IntegrationProperties.CHANNELS_MAX_UNICAST_SUBSCRIBERS, Integer.class);
+			this.setMaxSubscribers(maxSubscribers);
+		}
 	}
 
 }

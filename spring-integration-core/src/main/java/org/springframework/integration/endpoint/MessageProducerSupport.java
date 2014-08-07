@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,22 +16,23 @@
 
 package org.springframework.integration.endpoint;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageDeliveryException;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.core.MessageProducer;
 import org.springframework.integration.core.MessagingTemplate;
 import org.springframework.integration.history.MessageHistory;
 import org.springframework.integration.history.TrackableComponent;
-import org.springframework.integration.message.ErrorMessage;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.ErrorMessage;
 import org.springframework.util.Assert;
 
 /**
  * A support class for producer endpoints that provides a setter for the
  * output channel and a convenience method for sending Messages.
- * 
+ *
  * @author Mark Fisher
+ * @author Artem Bilan
  */
 public abstract class MessageProducerSupport extends AbstractEndpoint implements MessageProducer, TrackableComponent {
 
@@ -43,7 +44,11 @@ public abstract class MessageProducerSupport extends AbstractEndpoint implements
 
 	private final MessagingTemplate messagingTemplate = new MessagingTemplate();
 
+	protected MessageProducerSupport() {
+		this.setPhase(Integer.MAX_VALUE / 2);
+	}
 
+	@Override
 	public void setOutputChannel(MessageChannel outputChannel) {
 		this.outputChannel = outputChannel;
 	}
@@ -56,6 +61,7 @@ public abstract class MessageProducerSupport extends AbstractEndpoint implements
 		this.messagingTemplate.setSendTimeout(sendTimeout);
 	}
 
+	@Override
 	public void setShouldTrack(boolean shouldTrack) {
 		this.shouldTrack = shouldTrack;
 	}
@@ -63,6 +69,9 @@ public abstract class MessageProducerSupport extends AbstractEndpoint implements
 	@Override
 	protected void onInit() {
 		Assert.notNull(this.outputChannel, "outputChannel is required");
+		if (this.getBeanFactory() != null) {
+			this.messagingTemplate.setBeanFactory(this.getBeanFactory());
+		}
 	}
 
 	/**
@@ -86,7 +95,7 @@ public abstract class MessageProducerSupport extends AbstractEndpoint implements
 			throw new MessagingException("cannot send a null message");
 		}
 		if (this.shouldTrack) {
-			message = MessageHistory.write(message, this);
+			message = MessageHistory.write(message, this, this.getMessageBuilderFactory());
 		}
 		try {
 			this.messagingTemplate.send(this.outputChannel, message);

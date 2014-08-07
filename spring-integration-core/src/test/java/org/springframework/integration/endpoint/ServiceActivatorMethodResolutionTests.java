@@ -24,13 +24,13 @@ import java.util.Date;
 
 import org.junit.Test;
 
-import org.springframework.integration.Message;
 import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.core.PollableChannel;
 import org.springframework.integration.gateway.RequestReplyExchanger;
 import org.springframework.integration.handler.ServiceActivatingHandler;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Mark Fisher

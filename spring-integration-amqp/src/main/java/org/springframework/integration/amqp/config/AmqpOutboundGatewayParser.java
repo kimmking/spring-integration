@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -30,6 +30,7 @@ import org.springframework.util.StringUtils;
  * @author Oleg Zhurakousky
  * @author Gunnar Hillert
  * @author Artem Bilan
+ * @author Gary Russell
  *
  * @since 2.1
  */
@@ -55,6 +56,9 @@ public class AmqpOutboundGatewayParser extends AbstractConsumerEndpointParser {
 		IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, element, "routing-key-expression");
 		IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, element, "reply-timeout", "sendTimeout");
 		IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, element, "requires-reply");
+		IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, element, "default-delivery-mode");
+		IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, element, "lazy-connect");
+
 		IntegrationNamespaceUtils.setReferenceIfAttributeDefined(builder, element, "reply-channel", "outputChannel");
 		IntegrationNamespaceUtils.setReferenceIfAttributeDefined(builder, element, "return-channel");
 

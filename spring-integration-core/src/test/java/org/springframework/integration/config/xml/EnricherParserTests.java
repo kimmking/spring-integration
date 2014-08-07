@@ -34,19 +34,19 @@ import org.springframework.beans.TypeMismatchException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.expression.Expression;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageHandlingException;
-import org.springframework.integration.MessageHeaders;
-import org.springframework.integration.core.PollableChannel;
-import org.springframework.integration.core.SubscribableChannel;
 import org.springframework.integration.endpoint.EventDrivenConsumer;
 import org.springframework.integration.handler.AbstractReplyProducingMessageHandler;
 import org.springframework.integration.handler.advice.AbstractRequestHandlerAdvice;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.integration.transformer.ContentEnricher;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandlingException;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.SubscribableChannel;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -91,10 +91,14 @@ public class EnricherParserTests {
 				assertEquals("42", e.getValue().getExpressionString());
 			}
 			else if ("gender".equals(e.getKey().getExpressionString())) {
-				assertEquals("@testBean", e.getValue().getExpressionString());
+				assertEquals(Gender.MALE.name(), e.getValue().getExpressionString());
+			}
+			else if ("married".equals(e.getKey().getExpressionString())) {
+				assertEquals(Boolean.TRUE.toString(), e.getValue().getExpressionString());
 			}
 			else {
-				throw new IllegalStateException("expected 'name', 'age', and 'gender' only, not: " + e.getKey().getExpressionString());
+				throw new IllegalStateException("expected 'name', 'age', 'gender' and married only, not: "
+						+ e.getKey().getExpressionString());
 			}
 		}
 
@@ -127,12 +131,15 @@ public class EnricherParserTests {
 	@Test
 	public void integrationTest() {
 		SubscribableChannel requests = context.getBean("requests", SubscribableChannel.class);
+
 		class Foo extends AbstractReplyProducingMessageHandler {
+
 			@Override
 			protected Object handleRequestMessage(Message<?> requestMessage) {
 				return new Source("foo");
 			}
-		};
+		}
+
 		Foo foo = new Foo();
 		foo.setOutputChannel(context.getBean("replies", MessageChannel.class));
 		requests.subscribe(foo);
@@ -146,15 +153,18 @@ public class EnricherParserTests {
 		Target enriched = (Target) reply.getPayload();
 		assertEquals("foo", enriched.getName());
 		assertEquals(42, enriched.getAge());
-		assertEquals("male", enriched.getGender());
+		assertEquals(Gender.MALE, enriched.getGender());
+		assertTrue(enriched.isMarried());
 		assertNotSame(original, enriched);
 		assertEquals(1, adviceCalled);
 
 		MessageHeaders headers = reply.getHeaders();
 		assertEquals("bar", headers.get("foo"));
-		assertEquals("male", headers.get("testBean"));
+		assertEquals(Gender.MALE, headers.get("testBean"));
 		assertEquals("foo", headers.get("sourceName"));
 		assertEquals("test", headers.get("notOverwrite"));
+		requests.unsubscribe(foo);
+		adviceCalled--;
 	}
 
 	@Test
@@ -191,7 +201,9 @@ public class EnricherParserTests {
 
 		private volatile int age;
 
-		private volatile String gender;
+		private volatile Gender gender;
+
+		private volatile boolean married;
 
 		public String getName() {
 			return name;
@@ -209,12 +221,20 @@ public class EnricherParserTests {
 			this.age = age;
 		}
 
-		public String getGender() {
+		public Gender getGender() {
 			return gender;
 		}
 
-		public void setGender(String gender) {
+		public void setGender(Gender gender) {
 			this.gender = gender;
+		}
+
+		public boolean isMarried() {
+			return married;
+		}
+
+		public void setMarried(boolean married) {
+			this.married = married;
 		}
 
 		@Override
@@ -222,8 +242,14 @@ public class EnricherParserTests {
 			Target copy = new Target();
 			copy.setName(this.name);
 			copy.setAge(this.age);
+			copy.setGender(this.gender);
+			copy.setMarried(this.married);
 			return copy;
 		}
+	}
+
+	public static enum Gender {
+		MALE, FEMALE
 	}
 
 	public static class FooAdvice extends AbstractRequestHandlerAdvice {

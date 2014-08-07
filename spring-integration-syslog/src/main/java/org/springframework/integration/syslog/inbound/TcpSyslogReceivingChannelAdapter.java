@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,11 @@ package org.springframework.integration.syslog.inbound;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.ApplicationEventPublisherAware;
-import org.springframework.integration.Message;
 import org.springframework.integration.ip.tcp.connection.AbstractServerConnectionFactory;
 import org.springframework.integration.ip.tcp.connection.TcpListener;
 import org.springframework.integration.ip.tcp.connection.TcpNioServerConnectionFactory;
 import org.springframework.integration.ip.tcp.serializer.ByteArrayLfSerializer;
+import org.springframework.messaging.Message;
 
 /**
  * TCP implementation of a syslog inbound channel adapter.
@@ -39,7 +39,7 @@ public class TcpSyslogReceivingChannelAdapter extends SyslogReceivingChannelAdap
 	private volatile ApplicationEventPublisher applicationEventPublisher;
 
 	/**
-	 * @param connectionFactory
+	 * @param connectionFactory The connection factory.
 	 */
 	public void setConnectionFactory(AbstractServerConnectionFactory connectionFactory) {
 		this.connectionFactory = connectionFactory;
@@ -48,6 +48,11 @@ public class TcpSyslogReceivingChannelAdapter extends SyslogReceivingChannelAdap
 	@Override
 	public void setApplicationEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
 		this.applicationEventPublisher = applicationEventPublisher;
+	}
+
+	@Override
+	public String getComponentType() {
+		return "syslog:inbound-channel-adapter(tcp)";
 	}
 
 	@Override

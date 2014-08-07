@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2013 the original author or authors
+ * Copyright 2007-2014 the original author or authors
  *
  *     Licensed under the Apache License, Version 2.0 (the "License");
  *     you may not use this file except in compliance with the License.
@@ -15,13 +15,12 @@
  */
 package org.springframework.integration.mongodb.store;
 
+import com.mongodb.MongoClient;
 import org.junit.Test;
 
 import org.springframework.data.mongodb.core.SimpleMongoDbFactory;
 import org.springframework.integration.mongodb.rules.MongoDbAvailable;
 import org.springframework.integration.store.MessageStore;
-
-import com.mongodb.Mongo;
 
 /**
  * @author Oleg Zhurakousky
@@ -33,7 +32,9 @@ public class MongoDbMessageGroupStoreTests extends AbstractMongoDbMessageGroupSt
 
 	@Override
 	protected MongoDbMessageStore getMessageGroupStore() throws Exception {
-		return new MongoDbMessageStore( new SimpleMongoDbFactory(new Mongo(), "test"));
+		MongoDbMessageStore mongoDbMessageStore = new MongoDbMessageStore( new SimpleMongoDbFactory(new MongoClient(), "test"));
+		mongoDbMessageStore.afterPropertiesSet();
+		return mongoDbMessageStore;
 	}
 
 	@Override
@@ -46,4 +47,5 @@ public class MongoDbMessageGroupStoreTests extends AbstractMongoDbMessageGroupSt
 	public void testWithAggregatorWithShutdown() throws Exception {
 		super.testWithAggregatorWithShutdown("mongo-aggregator-config.xml");
 	}
+
 }

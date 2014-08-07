@@ -16,14 +16,14 @@
 
 package org.springframework.integration.transformer.support;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 
 /**
  * @author Mark Fisher
  * @author Artem Bilan
  * @since 3.0
  */
-class StaticHeaderValueMessageProcessor<T> extends AbstractHeaderValueMessageProcessor<T> {
+public class StaticHeaderValueMessageProcessor<T> extends AbstractHeaderValueMessageProcessor<T> {
 
 	private final T value;
 

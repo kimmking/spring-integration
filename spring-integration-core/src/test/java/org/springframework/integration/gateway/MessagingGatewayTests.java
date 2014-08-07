@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,69 +16,63 @@
 
 package org.springframework.integration.gateway;
 
-import static org.easymock.EasyMock.createMock;
-import static org.easymock.EasyMock.eq;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.getCurrentArguments;
-import static org.easymock.EasyMock.isA;
-import static org.easymock.EasyMock.replay;
-import static org.easymock.EasyMock.reset;
-import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.mockito.Mockito.mock;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
-import org.easymock.IAnswer;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
-import org.springframework.context.support.AbstractApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageDeliveryException;
-import org.springframework.integration.MessageHeaders;
-import org.springframework.integration.MessagingException;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.channel.PublishSubscribeChannel;
-import org.springframework.integration.core.MessageHandler;
-import org.springframework.integration.core.PollableChannel;
 import org.springframework.integration.handler.ServiceActivatingHandler;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.integration.test.util.TestUtils.TestApplicationContext;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.PollableChannel;
 
 /**
  * @author Iwein Fuld
  * @author Mark Fisher
  * @author Artem Bilan
+ * @author Gary Russell
  */
 @SuppressWarnings("unchecked")
 public class MessagingGatewayTests {
 
 	private volatile MessagingGatewaySupport messagingGateway;
 
-	private volatile MessageChannel requestChannel = createMock(MessageChannel.class);
+	private volatile MessageChannel requestChannel = Mockito.mock(MessageChannel.class);
 
-	private volatile PollableChannel replyChannel = createMock(PollableChannel.class);
+	private volatile PollableChannel replyChannel = Mockito.mock(PollableChannel.class);
 
 	@SuppressWarnings("rawtypes")
-	private volatile Message messageMock = createMock(Message.class);
-
-	private  final Object[] allmocks = new Object[] { requestChannel, replyChannel, messageMock };
-
+	private volatile Message messageMock = Mockito.mock(Message.class);
 
 	@Before
 	public void initializeSample() {
 		this.messagingGateway = new MessagingGatewaySupport() {};
 		this.messagingGateway.setRequestChannel(requestChannel);
 		this.messagingGateway.setReplyChannel(replyChannel);
-		AbstractApplicationContext context = TestUtils.createTestApplicationContext();
-		context.refresh();
-
-		this.messagingGateway.setBeanFactory(context);
+		TestApplicationContext applicationContext = TestUtils.createTestApplicationContext();
+		this.messagingGateway.setBeanFactory(applicationContext);
 		this.messagingGateway.afterPropertiesSet();
 		this.messagingGateway.start();
-		reset(allmocks);
+		applicationContext.refresh();
 	}
 
 
@@ -86,158 +80,170 @@ public class MessagingGatewayTests {
 
 	@Test
 	public void sendMessage() {
-		expect(requestChannel.send(messageMock, 1000L)).andReturn(true);
-		replay(allmocks);
+		Mockito.when(requestChannel.send(messageMock, 1000L)).thenReturn(true);
 		this.messagingGateway.send(messageMock);
-		verify(allmocks);
+		Mockito.verify(requestChannel).send(messageMock, 1000L);
 	}
 
 	@Test(expected=MessageDeliveryException.class)
 	public void sendMessage_failure() {
-		expect(messageMock.getHeaders()).andReturn(new MessageHeaders(null));
-		expect(requestChannel.send(messageMock, 1000)).andReturn(false);
-		replay(allmocks);
+		Mockito.when(messageMock.getHeaders()).thenReturn(new MessageHeaders(null));
+		Mockito.when(requestChannel.send(messageMock, 1000L)).thenReturn(false);
 		this.messagingGateway.send(messageMock);
-		verify(allmocks);
 	}
 
 	@Test
 	public void sendObject() {
-		expect(requestChannel.send(isA(Message.class), eq(1000L))).andAnswer(new IAnswer<Boolean>() {
-			public Boolean answer() throws Throwable {
-				assertEquals("test", ((Message<?>) getCurrentArguments()[0]).getPayload());
+		Mockito.doAnswer(new Answer<Boolean>() {
+
+			@Override
+			public Boolean answer(InvocationOnMock invocation) throws Throwable {
+				assertEquals("test", ((Message<?>) invocation.getArguments()[0]).getPayload());
 				return true;
 			}
-		});
-		replay(allmocks);
+		}).when(requestChannel).send(Mockito.any(Message.class), Mockito.eq(1000L));
+
 		this.messagingGateway.send("test");
-		verify(allmocks);
+		Mockito.verify(requestChannel).send(Mockito.any(Message.class), Mockito.eq(1000L));
 	}
 
 	@Test(expected=MessageDeliveryException.class)
 	public void sendObject_failure() {
-		expect(requestChannel.send(isA(Message.class), eq(1000L))).andAnswer(new IAnswer<Boolean>() {
-			public Boolean answer() throws Throwable {
-				assertEquals("test", ((Message<?>) getCurrentArguments()[0]).getPayload());
+		Mockito.doAnswer(new Answer<Boolean>() {
+
+			@Override
+			public Boolean answer(InvocationOnMock invocation) throws Throwable {
+				assertEquals("test", ((Message<?>) invocation.getArguments()[0]).getPayload());
 				return false;
 			}
-		});
-		replay(allmocks);
+		}).when(requestChannel).send(Mockito.any(Message.class), Mockito.eq(1000L));
+
 		this.messagingGateway.send("test");
-		verify(allmocks);
 	}
 
 	@Test(expected = IllegalArgumentException.class)
 	public void sendMessage_null() {
-		replay(allmocks);
-		try {
-			this.messagingGateway.send(null);
-		}
-		finally {
-			verify(allmocks);
-		}
+		this.messagingGateway.send(null);
 	}
 
 	/* receive tests */
 
 	@Test
 	public void receiveMessage() {
-		expect(replyChannel.receive(1000)).andReturn(messageMock);
-		expect(messageMock.getPayload()).andReturn("test").anyTimes();
-		replay(allmocks);
+		Mockito.when(replyChannel.receive(1000L)).thenReturn(messageMock);
+		Mockito.when(messageMock.getPayload()).thenReturn("test");
 		assertEquals("test", this.messagingGateway.receive());
-		verify(allmocks);
+		Mockito.verify(replyChannel).receive(1000L);
 	}
 
 	@Test
 	public void receiveMessage_null() {
-		expect(replyChannel.receive(1000)).andReturn(null);
-		replay(allmocks);
+		Mockito.when(replyChannel.receive(1000L)).thenReturn(null);
 		assertNull(this.messagingGateway.receive());
-		verify(allmocks);
+		Mockito.verify(replyChannel).receive(1000L);
 	}
 
 	/* send and receive tests */
 
 	@Test
 	public void sendObjectAndReceiveObject() {
-		expect(replyChannel.receive(100)).andReturn(messageMock);
-		expect(requestChannel.send(isA(Message.class), eq(1000L))).andReturn(true);
-		replay(allmocks);
+		Mockito.when(replyChannel.receive(100L)).thenReturn(messageMock);
+		Mockito.when(messageMock.getPayload()).thenReturn("test");
+		Mockito.doAnswer(new Answer<Boolean>() {
+
+			@Override
+			public Boolean answer(InvocationOnMock invocation) throws Throwable {
+				Message<?> message = (Message<?>) invocation.getArguments()[0];
+				MessageChannel replyChannel = (MessageChannel) message.getHeaders().getReplyChannel();
+				replyChannel.send(message);
+				return true;
+			}
+		}).when(requestChannel).send(Mockito.any(Message.class), Mockito.anyLong());
+
 		// TODO: if timeout is 0, this will fail occasionally
 		this.messagingGateway.setReplyTimeout(100);
-		this.messagingGateway.sendAndReceive("test");
-		verify(allmocks);
+		Object test = this.messagingGateway.sendAndReceive("test");
+		assertEquals("test", test);
 	}
 
 	@Test
-	@Ignore
 	public void sendMessageAndReceiveObject() {
-		// setup local mocks
-		MessageHeaders messageHeadersMock = createMock(MessageHeaders.class);
-		//set expectations
-		expect(replyChannel.receive(0)).andReturn(messageMock);
-		expect(messageMock.getHeaders()).andReturn(messageHeadersMock);
-		expect(requestChannel.send(messageMock)).andReturn(true);
-		expect(messageHeadersMock.getId()).andReturn(UUID.randomUUID());
+		Map<String, Object> headers = new HashMap<String, Object>();
+		headers.put(MessageHeaders.ID, UUID.randomUUID());
+		MessageHeaders messageHeadersMock = new MessageHeaders(headers);
+		Mockito.when(replyChannel.receive(0)).thenReturn(messageMock);
+		Mockito.when(messageMock.getHeaders()).thenReturn(messageHeadersMock);
+		Mockito.when(messageMock.getPayload()).thenReturn("foo");
 
-		//play scenario
-		replay(allmocks);
-		replay(messageHeadersMock);
+		Mockito.doAnswer(new Answer<Boolean>() {
+
+			@Override
+			public Boolean answer(InvocationOnMock invocation) throws Throwable {
+				Message<?> message = (Message<?>) invocation.getArguments()[0];
+				MessageChannel replyChannel = (MessageChannel) message.getHeaders().getReplyChannel();
+				replyChannel.send(message);
+				return true;
+			}
+		}).when(requestChannel).send(Mockito.any(Message.class), Mockito.anyLong());
+
 		this.messagingGateway.setReplyTimeout(0);
-		this.messagingGateway.sendAndReceive(messageMock);
-		verify(allmocks);
-		verify(messageHeadersMock);
+		Object o = this.messagingGateway.sendAndReceive(messageMock);
+		assertEquals("foo", o);
 	}
 
 	@Test(expected = IllegalArgumentException.class)
 	public void sendNullAndReceiveObject() {
-		replay(allmocks);
-		try {
-			this.messagingGateway.sendAndReceive(null);
-		}
-		finally {
-			verify(allmocks);
-		}
+		this.messagingGateway.sendAndReceive(null);
 	}
 
 	@Test
 	public void sendObjectAndReceiveMessage() {
-		expect(replyChannel.receive(100)).andReturn(messageMock);
-		expect(requestChannel.send(isA(Message.class), eq(1000L))).andReturn(true);
-		replay(allmocks);
+		Mockito.when(messageMock.getPayload()).thenReturn("foo");
+		Mockito.when(replyChannel.receive(100L)).thenReturn(messageMock);
+		Mockito.doAnswer(new Answer<Boolean>() {
+
+			@Override
+			public Boolean answer(InvocationOnMock invocation) throws Throwable {
+				Message<?> message = (Message<?>) invocation.getArguments()[0];
+				MessageChannel replyChannel = (MessageChannel) message.getHeaders().getReplyChannel();
+				replyChannel.send(messageMock);
+				return true;
+			}
+		}).when(requestChannel).send(Mockito.any(Message.class), Mockito.anyLong());
+
 		// TODO: commenting the next line causes the test to hang
-		this.messagingGateway.setReplyTimeout(100);
-		this.messagingGateway.sendAndReceiveMessage("test");
-		verify(allmocks);
+		this.messagingGateway.setReplyTimeout(100L);
+		Message<?> receiveMessage = this.messagingGateway.sendAndReceiveMessage("test");
+		assertSame(messageMock, receiveMessage);
 	}
 
 	@Test
-	@Ignore
 	public void sendMessageAndReceiveMessage() {
-		// setup local mocks
-		MessageHeaders messageHeadersMock = createMock(MessageHeaders.class);
-		//set expectations
-		expect(replyChannel.receive(0)).andReturn(messageMock);
-		expect(messageMock.getHeaders()).andReturn(messageHeadersMock);
-		expect(messageHeadersMock.getReplyChannel()).andReturn(replyChannel);
-		expect(requestChannel.send(messageMock)).andReturn(true);
-		expect(messageHeadersMock.getId()).andReturn(UUID.randomUUID());
+		Map<String, Object> headers = new HashMap<String, Object>();
+		headers.put(MessageHeaders.ID, UUID.randomUUID());
+		headers.put(MessageHeaders.REPLY_CHANNEL, replyChannel);
+		MessageHeaders messageHeadersMock = new MessageHeaders(headers);
+		Mockito.when(replyChannel.receive(Mockito.anyLong())).thenReturn(messageMock);
+		Mockito.when(messageMock.getHeaders()).thenReturn(messageHeadersMock);
+		Mockito.when(messageMock.getPayload()).thenReturn("foo");
+		Mockito.doAnswer(new Answer<Boolean>() {
 
-		replay(allmocks);
-		this.messagingGateway.sendAndReceiveMessage(messageMock);
-		verify(allmocks);
+			@Override
+			public Boolean answer(InvocationOnMock invocation) throws Throwable {
+				Message<?> message = (Message<?>) invocation.getArguments()[0];
+				MessageChannel replyChannel = (MessageChannel) message.getHeaders().getReplyChannel();
+				replyChannel.send(messageMock);
+				return true;
+			}
+		}).when(requestChannel).send(Mockito.any(Message.class), Mockito.anyLong());
+
+		Message<?> receiveMessage = this.messagingGateway.sendAndReceiveMessage(messageMock);
+		assertSame(messageMock, receiveMessage);
 	}
 
 	@Test(expected = IllegalArgumentException.class)
 	public void sendNullAndReceiveMessage() {
-		replay(allmocks);
-		try {
-			this.messagingGateway.sendAndReceiveMessage(null);
-		}
-		finally {
-			verify(allmocks);
-		}
+		this.messagingGateway.sendAndReceiveMessage(null);
 	}
 
 	// should fail but it doesn't now
@@ -245,18 +251,23 @@ public class MessagingGatewayTests {
 	public void validateErroMessageCanNotBeReplyMessage() {
 		DirectChannel reqChannel = new DirectChannel();
 		reqChannel.subscribe(new MessageHandler() {
+			@Override
 			public void handleMessage(Message<?> message) throws MessagingException {
 				throw new RuntimeException("ooops");
 			}
 		});
 		PublishSubscribeChannel errorChannel = new PublishSubscribeChannel();
 		ServiceActivatingHandler handler  = new ServiceActivatingHandler(new MyErrorService());
+		handler.setBeanFactory(mock(BeanFactory.class));
 		handler.afterPropertiesSet();
 		errorChannel.subscribe(handler);
+
+		this.messagingGateway = new MessagingGatewaySupport() {};
 
 		this.messagingGateway.setRequestChannel(reqChannel);
 		this.messagingGateway.setErrorChannel(errorChannel);
 		this.messagingGateway.setReplyChannel(null);
+		this.messagingGateway.setBeanFactory(mock(BeanFactory.class));
 		this.messagingGateway.afterPropertiesSet();
 		this.messagingGateway.start();
 
@@ -268,24 +279,28 @@ public class MessagingGatewayTests {
 	public void validateErrorChannelWithSuccessfulReply() {
 		DirectChannel reqChannel = new DirectChannel();
 		reqChannel.subscribe(new MessageHandler() {
+			@Override
 			public void handleMessage(Message<?> message) throws MessagingException {
 				throw new RuntimeException("ooops");
 			}
 		});
 		PublishSubscribeChannel errorChannel = new PublishSubscribeChannel();
 		ServiceActivatingHandler handler  = new ServiceActivatingHandler(new MyOneWayErrorService());
+		handler.setBeanFactory(mock(BeanFactory.class));
 		handler.afterPropertiesSet();
 		errorChannel.subscribe(handler);
+
+		this.messagingGateway = new MessagingGatewaySupport() {};
 
 		this.messagingGateway.setRequestChannel(reqChannel);
 		this.messagingGateway.setErrorChannel(errorChannel);
 		this.messagingGateway.setReplyChannel(null);
+		this.messagingGateway.setBeanFactory(mock(BeanFactory.class));
 		this.messagingGateway.afterPropertiesSet();
 		this.messagingGateway.start();
 
 		this.messagingGateway.send("hello");
 	}
-
 	public static class MyErrorService {
 		public Message<?> handleErrorMessage(Message<?> errorMessage){
 			return errorMessage;
@@ -294,7 +309,6 @@ public class MessagingGatewayTests {
 
 	public static class MyOneWayErrorService {
 		public void handleErrorMessage(Message<?> errorMessage){
-			return;
 		}
 	}
 

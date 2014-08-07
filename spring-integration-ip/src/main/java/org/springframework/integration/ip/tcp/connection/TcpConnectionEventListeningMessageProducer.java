@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,14 @@
  */
 package org.springframework.integration.ip.tcp.connection;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
 import org.springframework.context.ApplicationListener;
-import org.springframework.integration.Message;
 import org.springframework.integration.core.MessageProducer;
 import org.springframework.integration.endpoint.MessageProducerSupport;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 
@@ -43,15 +43,22 @@ public class TcpConnectionEventListeningMessageProducer extends MessageProducerS
 	 * Set the list of event types (classes that extend TcpConnectionEvent) that
 	 * this adapter should send to the message channel. By default, all event
 	 * types will be sent.
+	 *
+	 * @param eventTypes The event types.
 	 */
-	@SuppressWarnings("unchecked")
 	public void setEventTypes(Class<? extends TcpConnectionEvent>[] eventTypes) {
 		Assert.notEmpty(eventTypes, "at least one event type is required");
 		Set<Class<? extends TcpConnectionEvent>> eventTypeSet = new HashSet<Class<? extends TcpConnectionEvent>>();
-		eventTypeSet.addAll(CollectionUtils.arrayToList(eventTypes));
+		eventTypeSet.addAll(Arrays.asList(eventTypes));
 		this.eventTypes = eventTypeSet;
 	}
 
+	@Override
+	public String getComponentType() {
+		return "ip:tcp-connection-event-inbound-channel-adapter";
+	}
+
+	@Override
 	public void onApplicationEvent(TcpConnectionEvent event) {
 		if (this.isRunning()) {
 			if (CollectionUtils.isEmpty(this.eventTypes)) {
@@ -69,7 +76,7 @@ public class TcpConnectionEventListeningMessageProducer extends MessageProducerS
 	}
 
 	protected Message<TcpConnectionEvent> messageFromEvent(TcpConnectionEvent event) {
-		return MessageBuilder.withPayload(event).build();
+		return this.getMessageBuilderFactory().withPayload(event).build();
 	}
 
 }

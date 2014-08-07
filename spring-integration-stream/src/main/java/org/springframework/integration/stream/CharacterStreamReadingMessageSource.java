@@ -22,16 +22,16 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.integration.context.IntegrationObjectSupport;
 import org.springframework.integration.core.MessageSource;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.util.Assert;
 
 /**
  * A pollable source for {@link Reader Readers}.
- * 
+ *
  * @author Mark Fisher
  */
 public class CharacterStreamReadingMessageSource extends IntegrationObjectSupport implements MessageSource<String> {
@@ -61,7 +61,7 @@ public class CharacterStreamReadingMessageSource extends IntegrationObjectSuppor
 
 
 	public String getComponentType() {
-		return "stream:stdin-channel-adapter";
+		return "stream:stdin-channel-adapter(character)";
 	}
 
 	public Message<String> receive() {

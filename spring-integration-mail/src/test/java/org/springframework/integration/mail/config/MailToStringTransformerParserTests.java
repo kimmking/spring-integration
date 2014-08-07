@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,19 +22,21 @@ import static org.junit.Assert.assertTrue;
 
 import javax.mail.internet.MimeMessage;
 
-import org.easymock.classextension.EasyMock;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import org.springframework.beans.factory.BeanDefinitionStoreException;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.core.PollableChannel;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.support.GenericMessage;
+
 
 /**
  * @author Mark Fisher
+ * @author Artem Bilan
  */
 public class MailToStringTransformerParserTests {
 
@@ -42,32 +44,30 @@ public class MailToStringTransformerParserTests {
 	public void topLevelTransformer() throws Exception {
 		ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
 				"mailToStringTransformerParserTests.xml",  this.getClass());
-		MessageChannel input = new BeanFactoryChannelResolver(context).resolveChannelName("input");
-		PollableChannel output = (PollableChannel) new BeanFactoryChannelResolver(context).resolveChannelName("output");
-		MimeMessage mimeMessage = EasyMock.createNiceMock(MimeMessage.class);
-		EasyMock.expect(mimeMessage.getContent()).andReturn("hello");
-		EasyMock.replay(mimeMessage);
+		MessageChannel input = new BeanFactoryChannelResolver(context).resolveDestination("input");
+		PollableChannel output = (PollableChannel) new BeanFactoryChannelResolver(context).resolveDestination("output");
+		MimeMessage mimeMessage = Mockito.mock(MimeMessage.class);
+		Mockito.when(mimeMessage.getContent()).thenReturn("hello");
 		input.send(new GenericMessage<javax.mail.Message>(mimeMessage));
 		Message<?> result = output.receive(0);
 		assertNotNull(result);
 		assertEquals("hello", result.getPayload());
-		EasyMock.verify(mimeMessage);
+		Mockito.verify(mimeMessage).getContent();
 	}
 
 	@Test
 	public void transformerWithinChain() throws Exception {
 		ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
 				"mailToStringTransformerWithinChain.xml",  this.getClass());
-		MessageChannel input = new BeanFactoryChannelResolver(context).resolveChannelName("input");
-		PollableChannel output = (PollableChannel) new BeanFactoryChannelResolver(context).resolveChannelName("output");
-		MimeMessage mimeMessage = EasyMock.createNiceMock(MimeMessage.class);
-		EasyMock.expect(mimeMessage.getContent()).andReturn("foo");
-		EasyMock.replay(mimeMessage);
+		MessageChannel input = new BeanFactoryChannelResolver(context).resolveDestination("input");
+		PollableChannel output = (PollableChannel) new BeanFactoryChannelResolver(context).resolveDestination("output");
+		MimeMessage mimeMessage = Mockito.mock(MimeMessage.class);
+		Mockito.when(mimeMessage.getContent()).thenReturn("foo");
 		input.send(new GenericMessage<javax.mail.Message>(mimeMessage));
 		Message<?> result = output.receive(0);
 		assertNotNull(result);
 		assertEquals("FOO!!!", result.getPayload());
-		EasyMock.verify(mimeMessage);
+		Mockito.verify(mimeMessage).getContent();
 	}
 
 	@Test(expected = BeanDefinitionStoreException.class)

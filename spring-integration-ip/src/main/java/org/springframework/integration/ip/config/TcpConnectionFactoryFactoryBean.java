@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package org.springframework.integration.ip.config;
 
 import java.util.concurrent.Executor;
 
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.beans.factory.config.AbstractFactoryBean;
 import org.springframework.context.ApplicationEventPublisher;
@@ -53,7 +55,7 @@ import org.springframework.util.Assert;
  * @since 2.0.5
  */
 public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<AbstractConnectionFactory> implements SmartLifecycle, BeanNameAware,
-	ApplicationEventPublisherAware {
+		BeanFactoryAware, ApplicationEventPublisherAware {
 
 	private volatile AbstractConnectionFactory connectionFactory;
 
@@ -85,6 +87,8 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 
 	private volatile TcpMessageMapper mapper = new TcpMessageMapper();
 
+	private volatile boolean mapperSet;
+
 	private volatile boolean singleUse;
 
 	private volatile int backlog = 5;
@@ -103,6 +107,8 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 
 	private volatile boolean applySequence;
 
+	private volatile long readDelay;
+
 	private volatile TcpSSLContextSupport sslContextSupport;
 
 	private volatile TcpSocketSupport socketSupport = new DefaultTcpSocketSupport();
@@ -113,6 +119,13 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 
 	private volatile ApplicationEventPublisher applicationEventPublisher;
 
+	private volatile BeanFactory beanFactory;
+
+	@Override
+	public final void setBeanFactory(BeanFactory beanFactory) {
+		this.beanFactory = beanFactory;
+	}
+
 	@Override
 	public Class<?> getObjectType() {
 		return this.connectionFactory != null ? this.connectionFactory.getClass()
@@ -121,6 +134,9 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 
 	@Override
 	protected AbstractConnectionFactory createInstance() throws Exception {
+		if (!this.mapperSet) {
+			mapper.setBeanFactory(this.beanFactory);
+		}
 		if (this.usingNio) {
 			if ("server".equals(this.type)) {
 				TcpNioServerConnectionFactory connectionFactory = new TcpNioServerConnectionFactory(this.port);
@@ -137,7 +153,8 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 				connectionFactory.setTcpNioConnectionSupport(this.obtainNioConnectionSupport());
 				this.connectionFactory = connectionFactory;
 			}
-		} else {
+		}
+		else {
 			if ("server".equals(this.type)) {
 				TcpNetServerConnectionFactory connectionFactory = new TcpNetServerConnectionFactory(this.port);
 				this.setCommonAttributes(connectionFactory);
@@ -174,6 +191,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 		factory.setBeanName(this.beanName);
 		factory.setTcpSocketSupport(this.socketSupport);
 		factory.setApplicationEventPublisher(this.applicationEventPublisher);
+		factory.setReadDelay(this.readDelay);
 	}
 
 	private void setServerAttributes(AbstractServerConnectionFactory factory) {
@@ -243,7 +261,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param localAddress
+	 * @param localAddress The local addres..
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractServerConnectionFactory#setLocalAddress(java.lang.String)
 	 */
 	public void setLocalAddress(String localAddress) {
@@ -252,7 +270,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param soTimeout
+	 * @param soTimeout The timeout.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSoTimeout(int)
 	 */
 	public void setSoTimeout(int soTimeout) {
@@ -260,7 +278,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param soReceiveBufferSize
+	 * @param soReceiveBufferSize The receive buffer size.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSoReceiveBufferSize(int)
 	 */
 	public void setSoReceiveBufferSize(int soReceiveBufferSize) {
@@ -268,7 +286,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param soSendBufferSize
+	 * @param soSendBufferSize The send buffer size.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSoSendBufferSize(int)
 	 */
 	public void setSoSendBufferSize(int soSendBufferSize) {
@@ -276,7 +294,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param soTcpNoDelay
+	 * @param soTcpNoDelay The TCP no delay to set.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSoTcpNoDelay(boolean)
 	 */
 	public void setSoTcpNoDelay(boolean soTcpNoDelay) {
@@ -284,7 +302,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param soLinger
+	 * @param soLinger The SO Linger to set.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSoLinger(int)
 	 */
 	public void setSoLinger(int soLinger) {
@@ -292,7 +310,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param soKeepAlive
+	 * @param soKeepAlive The SO keepalive to set.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSoKeepAlive(boolean)
 	 */
 	public void setSoKeepAlive(boolean soKeepAlive) {
@@ -300,7 +318,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param soTrafficClass
+	 * @param soTrafficClass The SO traffic class to set.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSoTrafficClass(int)
 	 */
 	public void setSoTrafficClass(int soTrafficClass) {
@@ -315,7 +333,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param usingDirectBuffers
+	 * @param usingDirectBuffers the usingDirectBuffers to set.
 	 * @see org.springframework.integration.ip.tcp.connection.TcpNioServerConnectionFactory#setUsingDirectBuffers(boolean)
 	 */
 	public void setUsingDirectBuffers(boolean usingDirectBuffers) {
@@ -323,7 +341,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param taskExecutor
+	 * @param taskExecutor The task executor.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setTaskExecutor(java.util.concurrent.Executor)
 	 */
 	public void setTaskExecutor(Executor taskExecutor) {
@@ -332,7 +350,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param deserializer
+	 * @param deserializer The deserializer.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setDeserializer(org.springframework.core.serializer.Deserializer)
 	 */
 	public void setDeserializer(Deserializer<?> deserializer) {
@@ -341,7 +359,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param serializer
+	 * @param serializer The serializer.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSerializer(org.springframework.core.serializer.Serializer)
 	 */
 	public void setSerializer(Serializer<?> serializer) {
@@ -350,16 +368,17 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param mapper
+	 * @param mapper The mapper.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setMapper(org.springframework.integration.ip.tcp.connection.TcpMessageMapper)
 	 */
 	public void setMapper(TcpMessageMapper mapper) {
 		Assert.notNull(mapper, "TcpMessageMapper may not be null");
 		this.mapper = mapper;
+		this.mapperSet = true;
 	}
 
 	/**
-	 * @param singleUse
+	 * @param singleUse The singleUse to set.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setSingleUse(boolean)
 	 */
 	public void setSingleUse(boolean singleUse) {
@@ -367,7 +386,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param backlog
+	 * @param backlog The backlog.
 	 * @see AbstractServerConnectionFactory#setBacklog(int)
 	 */
 	public void setBacklog(int backlog) {
@@ -375,7 +394,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param interceptorFactoryChain
+	 * @param interceptorFactoryChain The interceptor factory chain.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setInterceptorFactoryChain(org.springframework.integration.ip.tcp.connection.TcpConnectionInterceptorFactoryChain)
 	 */
 	public void setInterceptorFactoryChain(
@@ -385,7 +404,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	}
 
 	/**
-	 * @param lookupHost
+	 * @param lookupHost The lookupHost to set.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#setLookupHost(boolean)
 	 */
 	public void setLookupHost(boolean lookupHost) {
@@ -396,6 +415,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	 *
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#start()
 	 */
+	@Override
 	public void start() {
 		this.connectionFactory.start();
 	}
@@ -404,6 +424,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	 *
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#stop()
 	 */
+	@Override
 	public void stop() {
 		this.connectionFactory.stop();
 	}
@@ -412,6 +433,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	 * @return phase
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#getPhase()
 	 */
+	@Override
 	public int getPhase() {
 		return this.connectionFactory.getPhase();
 	}
@@ -420,22 +442,26 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	 * @return isAutoStartup
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#isAutoStartup()
 	 */
+	@Override
 	public boolean isAutoStartup() {
 		return this.connectionFactory.isAutoStartup();
 	}
 
 	/**
-	 * @param callback
+	 * @param callback The Runnable to invoke.
 	 * @see org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory#stop(java.lang.Runnable)
 	 */
+	@Override
 	public void stop(Runnable callback) {
 		this.connectionFactory.stop(callback);
 	}
 
+	@Override
 	public boolean isRunning() {
 		return this.connectionFactory.isRunning();
 	}
 
+	@Override
 	public void setBeanName(String name) {
 		this.beanName = name;
 	}
@@ -445,6 +471,10 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 	 */
 	public void setApplySequence(boolean applySequence) {
 		this.applySequence = applySequence;
+	}
+
+	public void setReadDelay(long readDelay) {
+		this.readDelay = readDelay;
 	}
 
 	public void setSslContextSupport(TcpSSLContextSupport sslContextSupport) {
@@ -459,7 +489,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 
 	/**
 	 * Rare property - not exposed through namespace
-	 * @param tcpNioSupport
+	 * @param tcpNioSupport The tcpNioSupport to set.
 	 */
 	public void setNioConnectionSupport(TcpNioConnectionSupport tcpNioSupport) {
 		Assert.notNull(tcpNioSupport, "TcpNioConnectionSupport may not be null");
@@ -472,6 +502,7 @@ public class TcpConnectionFactoryFactoryBean extends AbstractFactoryBean<Abstrac
 		this.socketFactorySupport = tcpSocketFactorySupport;
 	}
 
+	@Override
 	public void setApplicationEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
 		this.applicationEventPublisher = applicationEventPublisher;
 	}

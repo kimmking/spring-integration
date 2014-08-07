@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -35,6 +36,7 @@ import org.springframework.util.Assert;
 /**
  * A client connection factory that creates {@link TcpNioConnection}s.
  * @author Gary Russell
+ * @author Artem Bilan
  * @since 2.0
  *
  */
@@ -99,7 +101,7 @@ public class TcpNioClientConnectionFactory extends
 	/**
 	 * When set to true, connections created by this factory attempt
 	 * to use direct buffers where possible.
-	 * @param usingDirectBuffers
+	 * @param usingDirectBuffers The usingDirectBuffers to set.
 	 * @see ByteBuffer
 	 */
 	public void setUsingDirectBuffers(boolean usingDirectBuffers) {
@@ -112,10 +114,16 @@ public class TcpNioClientConnectionFactory extends
 	}
 
 	@Override
-	public void close() {
+	public void stop() {
 		if (this.selector != null) {
-			this.selector.wakeup();
+			try {
+				this.selector.close();
+			}
+			catch (Exception e) {
+				logger.error("Error closing selector", e);
+			}
 		}
+		super.stop();
 	}
 
 	@Override
@@ -129,6 +137,7 @@ public class TcpNioClientConnectionFactory extends
 		super.start();
 	}
 
+	@Override
 	public void run() {
 		if (logger.isDebugEnabled()) {
 			logger.debug("Read selector running for connections to " + this.getHost() + ":" + this.getPort());
@@ -140,8 +149,13 @@ public class TcpNioClientConnectionFactory extends
 				int soTimeout = this.getSoTimeout();
 				int selectionCount = 0;
 				try {
-					selectionCount = selector.select(soTimeout < 0 ? 0 : soTimeout);
-				} catch (CancelledKeyException cke) {
+					long timeout = soTimeout < 0 ? 0 : soTimeout;
+					if (getDelayedReads().size() > 0 && (timeout == 0 || getReadDelay() < timeout)) {
+						timeout = getReadDelay();
+					}
+					selectionCount = selector.select(timeout);
+				}
+				catch (CancelledKeyException cke) {
 					if (logger.isDebugEnabled()) {
 						logger.debug("CancelledKeyException during Selector.select()");
 					}
@@ -149,7 +163,8 @@ public class TcpNioClientConnectionFactory extends
 				while ((newChannel = newChannels.poll()) != null) {
 					try {
 						newChannel.register(this.selector, SelectionKey.OP_READ, channelMap.get(newChannel));
-					} catch (ClosedChannelException cce) {
+					}
+					catch (ClosedChannelException cce) {
 						if (logger.isDebugEnabled()) {
 							logger.debug("Channel closed before registering with selector for reading");
 						}
@@ -157,7 +172,13 @@ public class TcpNioClientConnectionFactory extends
 				}
 				this.processNioSelections(selectionCount, selector, null, this.channelMap);
 			}
-		} catch (Exception e) {
+		}
+		catch (ClosedSelectorException cse) {
+			if (this.isActive()) {
+				logger.error("Selector closed", cse);
+			}
+		}
+		catch (Exception e) {
 			logger.error("Exception in read selector thread", e);
 			this.setActive(false);
 		}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,28 +20,33 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.hamcrest.Matchers;
 import org.junit.Test;
 
-import org.springframework.beans.DirectFieldAccessor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.channel.AbstractMessageChannel;
+import org.springframework.integration.channel.ChannelInterceptorAware;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.ChannelInterceptorAdapter;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.util.StringUtils;
 
 /**
  * @author Mark Fisher
  * @author Oleg Zhurakousky
+ * @author Artem Bilan
  */
 public class ChannelInterceptorTests {
 
@@ -120,7 +125,7 @@ public class ChannelInterceptorTests {
 		channel.send(message);
 		Message<?> result = channel.receive(0);
 		assertEquals(1, PreReceiveReturnsTrueInterceptor.counter.get());
-		assertNotNull(result);		
+		assertNotNull(result);
 	}
 
 	@Test
@@ -130,7 +135,7 @@ public class ChannelInterceptorTests {
 		channel.send(message);
 		Message<?> result = channel.receive(0);
 		assertEquals(1, PreReceiveReturnsFalseInterceptor.counter.get());
-		assertNull(result);		
+		assertNull(result);
 	}
 
 	@Test
@@ -154,27 +159,24 @@ public class ChannelInterceptorTests {
 		assertEquals(0, messageCount.get());
 		channel.send(new GenericMessage<String>("test"));
 		Message<?> result = channel.receive(0);
-		assertNotNull(result);		
+		assertNotNull(result);
 		assertEquals(2, invokedCount.get());
 		assertEquals(1, messageCount.get());
 	}
 	@Test
 	public void testInterceptorBeanWithPnamespace(){
 		ApplicationContext ac = new ClassPathXmlApplicationContext("ChannelInterceptorTests-context.xml", ChannelInterceptorTests.class);
-		AbstractMessageChannel channel = ac.getBean("input", AbstractMessageChannel.class);
-		DirectFieldAccessor cAccessor = new DirectFieldAccessor(channel);
-		Object iList = cAccessor.getPropertyValue("interceptors");
-		DirectFieldAccessor iAccessor = new DirectFieldAccessor(iList);
-		@SuppressWarnings("unchecked")
-		List<PreSendReturnsMessageInterceptor> interceptorList =
-					(List<PreSendReturnsMessageInterceptor>) iAccessor.getPropertyValue("interceptors");
-		String foo = interceptorList.get(0).getFoo();
+		ChannelInterceptorAware channel = ac.getBean("input", AbstractMessageChannel.class);
+		List<ChannelInterceptor> interceptors = channel.getChannelInterceptors();
+		ChannelInterceptor channelInterceptor = interceptors.get(0);
+		assertThat(channelInterceptor, Matchers.instanceOf(PreSendReturnsMessageInterceptor.class));
+		String foo = ((PreSendReturnsMessageInterceptor) channelInterceptor).getFoo();
 		assertTrue(StringUtils.hasText(foo));
 		assertEquals("foo", foo);
 	}
 
 
-	public static class PreSendReturnsMessageInterceptor extends ChannelInterceptorAdapter { 
+	public static class PreSendReturnsMessageInterceptor extends ChannelInterceptorAdapter {
 		private String foo;
 
 		private static AtomicInteger counter = new AtomicInteger();
@@ -196,7 +198,7 @@ public class ChannelInterceptorTests {
 	}
 
 
-	private static class PreSendReturnsNullInterceptor extends ChannelInterceptorAdapter { 
+	private static class PreSendReturnsNullInterceptor extends ChannelInterceptorAdapter {
 
 		private static AtomicInteger counter = new AtomicInteger();
 
@@ -213,7 +215,7 @@ public class ChannelInterceptorTests {
 	}
 
 
-	private static class PreReceiveReturnsTrueInterceptor extends ChannelInterceptorAdapter { 
+	private static class PreReceiveReturnsTrueInterceptor extends ChannelInterceptorAdapter {
 
 		private static AtomicInteger counter = new AtomicInteger();
 
@@ -225,7 +227,7 @@ public class ChannelInterceptorTests {
 	}
 
 
-	private static class PreReceiveReturnsFalseInterceptor extends ChannelInterceptorAdapter { 
+	private static class PreReceiveReturnsFalseInterceptor extends ChannelInterceptorAdapter {
 
 		private static AtomicInteger counter = new AtomicInteger();
 

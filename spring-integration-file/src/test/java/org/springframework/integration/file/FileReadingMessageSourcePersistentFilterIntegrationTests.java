@@ -32,7 +32,7 @@ import org.junit.Test;
 import org.springframework.beans.DirectFieldAccessor;
 import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 
 /**
  * @author Iwein Fuld

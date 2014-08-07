@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,8 +23,9 @@ import org.junit.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.integration.security.TestHandler;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.security.SecurityTestUtils;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -37,6 +38,7 @@ import org.springframework.test.context.junit4.AbstractJUnit4SpringContextTests;
 /**
  * @author Mark Fisher
  * @author Oleg Zhurakousky
+ * @author Artem Bilan
  */
 @ContextConfiguration
 public class ChannelAdapterSecurityIntegrationTests extends AbstractJUnit4SpringContextTests {
@@ -44,6 +46,10 @@ public class ChannelAdapterSecurityIntegrationTests extends AbstractJUnit4Spring
 	@Autowired
 	@Qualifier("securedChannelAdapter")
 	MessageChannel securedChannelAdapter;
+
+	@Autowired
+	@Qualifier("securedChannelAdapter")
+	MessageChannel securedChannelAdapter2;
 
 	@Autowired
 	@Qualifier("unsecuredChannelAdapter")
@@ -65,13 +71,14 @@ public class ChannelAdapterSecurityIntegrationTests extends AbstractJUnit4Spring
 		login("bob", "bobspassword", "ROLE_ADMINA");
 		securedChannelAdapter.send(new GenericMessage<String>("test"));
 	}
-	
+
 	@Test
 	@DirtiesContext
 	public void testSecuredWithPermission() {
 		login("bob", "bobspassword", "ROLE_ADMIN", "ROLE_PRESIDENT");
 		securedChannelAdapter.send(new GenericMessage<String>("test"));
-		assertEquals("Wrong size of message list in target", 1, testConsumer.sentMessages.size());
+		securedChannelAdapter2.send(new GenericMessage<String>("test"));
+		assertEquals("Wrong size of message list in target", 2, testConsumer.sentMessages.size());
 	}
 
 	@Test(expected = AccessDeniedException.class)
@@ -79,6 +86,13 @@ public class ChannelAdapterSecurityIntegrationTests extends AbstractJUnit4Spring
 	public void testSecuredWithoutPermision() {
 		login("bob", "bobspassword", "ROLE_USER");
 		securedChannelAdapter.send(new GenericMessage<String>("test"));
+	}
+
+	@Test(expected = AccessDeniedException.class)
+	@DirtiesContext
+	public void testSecured2WithoutPermision() {
+		login("bob", "bobspassword", "ROLE_USER");
+		securedChannelAdapter2.send(new GenericMessage<String>("test"));
 	}
 
 	@Test(expected = AuthenticationException.class)

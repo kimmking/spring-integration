@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,17 @@
 
 package org.springframework.integration.file.remote.handler;
 
-import java.io.File;
-
 import org.springframework.expression.Expression;
-import org.springframework.integration.Message;
 import org.springframework.integration.file.FileNameGenerator;
 import org.springframework.integration.file.remote.RemoteFileTemplate;
 import org.springframework.integration.file.remote.session.SessionFactory;
+import org.springframework.integration.file.support.FileExistsMode;
 import org.springframework.integration.handler.AbstractMessageHandler;
+import org.springframework.messaging.Message;
 import org.springframework.util.Assert;
 
 /**
- * A {@link org.springframework.integration.core.MessageHandler} implementation that transfers files to a remote server.
+ * A {@link org.springframework.messaging.MessageHandler} implementation that transfers files to a remote server.
  *
  * @author Iwein Fuld
  * @author Mark Fisher
@@ -41,14 +40,22 @@ public class FileTransferringMessageHandler<F> extends AbstractMessageHandler {
 
 	private final RemoteFileTemplate<F> remoteFileTemplate;
 
+	private final FileExistsMode mode;
+
 	public FileTransferringMessageHandler(SessionFactory<F> sessionFactory) {
 		Assert.notNull(sessionFactory, "sessionFactory must not be null");
 		this.remoteFileTemplate = new RemoteFileTemplate<F>(sessionFactory);
+		this.mode = FileExistsMode.REPLACE;
 	}
 
 	public FileTransferringMessageHandler(RemoteFileTemplate<F> remoteFileTemplate) {
+		this(remoteFileTemplate, FileExistsMode.REPLACE);
+	}
+
+	public FileTransferringMessageHandler(RemoteFileTemplate<F> remoteFileTemplate, FileExistsMode mode) {
 		Assert.notNull(remoteFileTemplate, "remoteFileTemplate must not be null");
 		this.remoteFileTemplate = remoteFileTemplate;
+		this.mode = mode;
 	}
 
 
@@ -72,22 +79,13 @@ public class FileTransferringMessageHandler<F> extends AbstractMessageHandler {
 		return this.remoteFileTemplate.getTemporaryFileSuffix();
 	}
 
-	/**
-	 * @deprecated This property is no longer used; byte[] and String payloads are written directly
-	 */
-	@Deprecated
-	public void setTemporaryDirectory(File temporaryDirectory) {
-	}
-
 	protected boolean isUseTemporaryFileName() {
 		return this.remoteFileTemplate.isUseTemporaryFileName();
 	}
 
-
 	public void setUseTemporaryFileName(boolean useTemporaryFileName) {
 		this.remoteFileTemplate.setUseTemporaryFileName(useTemporaryFileName);
 	}
-
 
 	public void setFileNameGenerator(FileNameGenerator fileNameGenerator) {
 		this.remoteFileTemplate.setFileNameGenerator(fileNameGenerator);
@@ -109,7 +107,7 @@ public class FileTransferringMessageHandler<F> extends AbstractMessageHandler {
 
 	@Override
 	protected void handleMessageInternal(Message<?> message) throws Exception {
-		this.remoteFileTemplate.send(message);
+		this.remoteFileTemplate.send(message, this.mode);
 	}
 
 }

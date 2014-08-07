@@ -34,13 +34,13 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.springframework.beans.factory.BeanFactory;
-import org.springframework.integration.Message;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
+import org.springframework.messaging.Message;
 
 /**
  * @author Jonas Partner
@@ -94,18 +94,22 @@ public class JdbcPollingChannelAdapterIntegrationTests {
 				"select * from item where status=:status");
 		adapter.setSelectSqlParameterSource(new SqlParameterSource() {
 
+			@Override
 			public boolean hasValue(String name) {
 				return "status".equals(name);
 			}
 
+			@Override
 			public Object getValue(String name) throws IllegalArgumentException {
 				return 2;
 			}
 
+			@Override
 			public String getTypeName(String name) {
 				return null;
 			}
 
+			@Override
 			public int getSqlType(String name) {
 				return Types.INTEGER;
 			}
@@ -163,13 +167,13 @@ public class JdbcPollingChannelAdapterIntegrationTests {
 		assertEquals("Wrong status", 2, item.getStatus());
 
 		int countOfStatusTwo = this.jdbcTemplate
-				.queryForInt("select count(*) from item where status = 2");
+				.queryForObject("select count(*) from item where status = 2", Integer.class);
 		assertEquals(
 				"Status not updated incorect number of rows with status 2", 0,
 				countOfStatusTwo);
 
 		int countOfStatusTen = this.jdbcTemplate
-				.queryForInt("select count(*) from item where status = 10");
+				.queryForObject("select count(*) from item where status = 10", Integer.class);
 		assertEquals(
 				"Status not updated incorect number of rows with status 10", 2,
 				countOfStatusTen);
@@ -199,13 +203,13 @@ public class JdbcPollingChannelAdapterIntegrationTests {
 		assertEquals("Wrong status", 2, item.getStatus());
 
 		int countOfStatusTwo = this.jdbcTemplate
-				.queryForInt("select count(*) from item where status = 2");
+				.queryForObject("select count(*) from item where status = 2", Integer.class);
 		assertEquals(
 				"Status not updated incorect number of rows with status 2", 0,
 				countOfStatusTwo);
 
 		int countOfStatusTen = this.jdbcTemplate
-				.queryForInt("select count(*) from item where status = 10");
+				.queryForObject("select count(*) from item where status = 10", Integer.class);
 		assertEquals(
 				"Status not updated incorect number of rows with status 10", 2,
 				countOfStatusTen);
@@ -238,13 +242,13 @@ public class JdbcPollingChannelAdapterIntegrationTests {
 		assertEquals("Wrong status", 2, item.getStatus());
 
 		int countOfStatusTwo = this.jdbcTemplate
-				.queryForInt("select count(*) from item where status = 2");
+				.queryForObject("select count(*) from item where status = 2", Integer.class);
 		assertEquals(
 				"Status not updated incorect number of rows with status 2", 2,
 				countOfStatusTwo);
 
 		int countOfStatusTen = this.jdbcTemplate
-				.queryForInt("select count(*) from copy where status = 10");
+				.queryForObject("select count(*) from copy where status = 10", Integer.class);
 		assertEquals(
 				"Status not updated incorect number of rows with status 10", 2,
 				countOfStatusTen);
@@ -276,13 +280,13 @@ public class JdbcPollingChannelAdapterIntegrationTests {
 		assertEquals("Wrong status", 2, item.getStatus());
 
 		int countOfStatusTwo = this.jdbcTemplate
-				.queryForInt("select count(*) from item where status = 2");
+				.queryForObject("select count(*) from item where status = 2", Integer.class);
 		assertEquals(
 				"Status not updated incorect number of rows with status 2", 0,
 				countOfStatusTwo);
 
 		int countOfStatusTen = this.jdbcTemplate
-				.queryForInt("select count(*) from item where status = 10");
+				.queryForObject("select count(*) from item where status = 10", Integer.class);
 		assertEquals(
 				"Status not updated incorect number of rows with status 10", 2,
 				countOfStatusTen);
@@ -328,6 +332,7 @@ public class JdbcPollingChannelAdapterIntegrationTests {
 
 	private static class ItemRowMapper implements RowMapper<Item> {
 
+		@Override
 		public Item mapRow(ResultSet rs, int rowNum) throws SQLException {
 			Item item = new Item();
 			item.setId(rs.getInt(1));

@@ -37,8 +37,8 @@ import org.junit.Test;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.integration.mapping.HeaderMapper;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.util.CollectionUtils;
@@ -396,7 +396,7 @@ public class DefaultHttpHeaderMapperFromMessageOutboundTests {
 
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US);
 
-		assertEquals(simpleDateFormat.parse("Thu, 01 Jan 1970 03:25:45 GMT").getTime(), headers.getIfNotModifiedSince());
+		assertEquals(simpleDateFormat.parse("Thu, 01 Jan 1970 03:25:45 GMT").getTime(), headers.getIfModifiedSince());
 	}
 
 	@Test
@@ -409,7 +409,7 @@ public class DefaultHttpHeaderMapperFromMessageOutboundTests {
 
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US);
 
-		assertEquals(simpleDateFormat.parse("Thu, 01 Jan 1970 03:25:45 GMT").getTime(), headers.getIfNotModifiedSince());
+		assertEquals(simpleDateFormat.parse("Thu, 01 Jan 1970 03:25:45 GMT").getTime(), headers.getIfModifiedSince());
 	}
 	@Test
 	public void validateIfModifiedSinceAsDate() throws ParseException{
@@ -421,7 +421,7 @@ public class DefaultHttpHeaderMapperFromMessageOutboundTests {
 
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US);
 
-		assertEquals(simpleDateFormat.parse("Thu, 01 Jan 1970 03:25:45 GMT").getTime(), headers.getIfNotModifiedSince());
+		assertEquals(simpleDateFormat.parse("Thu, 01 Jan 1970 03:25:45 GMT").getTime(), headers.getIfModifiedSince());
 	}
 
 	// If-None-Match
@@ -685,7 +685,7 @@ public class DefaultHttpHeaderMapperFromMessageOutboundTests {
 		Calendar c = Calendar.getInstance();
 		c.setTime(ifModifiedSince);
 		c.set(Calendar.MILLISECOND, 0);
-		assertEquals(c.getTimeInMillis(), headers.getIfNotModifiedSince());
+		assertEquals(c.getTimeInMillis(), headers.getIfModifiedSince());
 	}
 
 }

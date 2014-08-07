@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import java.lang.annotation.Target;
  * Indicates that a method is capable of playing the role of a Message Filter.
  * <p>
  * A method annotated with @Filter may accept a parameter of type
- * {@link org.springframework.integration.Message} or of the expected
+ * {@link org.springframework.messaging.Message} or of the expected
  * Message payload's type. Any type conversion supported by default or any
  * Converters registered with the "integrationConversionService" bean will be
  * applied to the Message payload if necessary. Header values can also be passed
@@ -36,9 +36,10 @@ import java.lang.annotation.Target;
  *
  * @author Mark Fisher
  * @author Gary Russell
+ * @author Artem Bilan
  * @since 2.0
  */
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface Filter {
@@ -47,8 +48,27 @@ public @interface Filter {
 
 	String outputChannel() default "";
 
+	String discardChannel() default "";
+
+	String throwExceptionOnRejection() default "";
+
 	String[] adviceChain() default {};
 
-	boolean discardWithinAdvice() default true;
+	String discardWithinAdvice() default "true";
 
+	/*
+	 {@code SmartLifecycle} options.
+	 Can be specified as 'property placeholder', e.g. {@code ${foo.autoStartup}}.
+	 */
+	String autoStartup() default "true";
+
+	String phase() default "0";
+
+	/**
+	 * @return the {@link Poller} options for a polled endpoint
+	 * ({@link org.springframework.integration.scheduling.PollerMetadata}).
+	 * This attribute is an {@code array} just to allow an empty default (no poller).
+	 * Only one {@link Poller} element is allowed.
+	 */
+	Poller[] poller() default {};
 }

@@ -27,18 +27,17 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.channel.MessagePublishingErrorHandler;
 import org.springframework.integration.endpoint.MessageProducerSupport;
 import org.springframework.integration.redis.event.RedisExceptionEvent;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
 import org.springframework.integration.util.ErrorHandlingTaskExecutor;
 import org.springframework.jmx.export.annotation.ManagedMetric;
 import org.springframework.jmx.export.annotation.ManagedOperation;
 import org.springframework.jmx.export.annotation.ManagedResource;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
@@ -69,6 +68,8 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 	private volatile long receiveTimeout = DEFAULT_RECEIVE_TIMEOUT;
 
 	private volatile long recoveryInterval = DEFAULT_RECOVERY_INTERVAL;
+
+	private volatile long stopTimeout = DEFAULT_RECEIVE_TIMEOUT;
 
 	private volatile boolean active;
 
@@ -105,7 +106,6 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 	 * the retrieved data will be used as the payload for a new Spring Integration
 	 * Message. Otherwise, the data is deserialized as Spring Integration
 	 * Message.
-	 *
 	 * @param expectMessage Defaults to false
 	 */
 	public void setExpectMessage(boolean expectMessage) {
@@ -115,21 +115,26 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 	/**
 	 * This timeout (milliseconds) is used when retrieving elements from the queue
 	 * specified by {@link #boundListOperations}.
-	 * <p/>
-	 * If the queue does contain elements, the data is retrieved immediately. However,
+	 * <p> If the queue does contain elements, the data is retrieved immediately. However,
 	 * if the queue is empty, the Redis connection is blocked until either an element
 	 * can be retrieved from the queue or until the specified timeout passes.
-	 * <p/>
-	 * A timeout of zero can be used to block indefinitely. If not set explicitly
+	 * <p> A timeout of zero can be used to block indefinitely. If not set explicitly
 	 * the timeout value will default to {@code 1000}
-	 * <p/>
-	 * See also: http://redis.io/commands/brpop
-	 *
+	 * <p> See also: http://redis.io/commands/brpop
 	 * @param receiveTimeout Must be non-negative. Specified in milliseconds.
 	 */
 	public void setReceiveTimeout(long receiveTimeout) {
 		Assert.isTrue(receiveTimeout > 0, "'receiveTimeout' must be > 0.");
 		this.receiveTimeout = receiveTimeout;
+	}
+
+	/**
+	 * @param stopTimeout the timeout to block {@link #doStop()} until the last message will be processed
+	 * or this timeout is reached. Should be less then or equal to {@link #receiveTimeout}
+	 * @since 4.0.3
+	 */
+	public void setStopTimeout(long stopTimeout) {
+		this.stopTimeout = stopTimeout;
 	}
 
 	public void setTaskExecutor(Executor taskExecutor) {
@@ -154,7 +159,8 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 		}
 		if (this.taskExecutor == null) {
 			String beanName = this.getComponentName();
-			this.taskExecutor = new SimpleAsyncTaskExecutor((beanName == null ? "" : beanName + "-") + this.getComponentType());
+			this.taskExecutor = new SimpleAsyncTaskExecutor((beanName == null ? "" : beanName + "-")
+					+ this.getComponentType());
 		}
 		if (!(this.taskExecutor instanceof ErrorHandlingTaskExecutor) && this.getBeanFactory() != null) {
 			MessagePublishingErrorHandler errorHandler =
@@ -178,10 +184,16 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 			value = this.boundListOperations.rightPop(this.receiveTimeout, TimeUnit.MILLISECONDS);
 		}
 		catch (Exception e) {
-			logger.error("Failed to execute listening task. Will attempt to resubmit in " + this.recoveryInterval + " milliseconds.", e);
 			this.listening = false;
-			this.sleepBeforeRecoveryAttempt();
-			this.publishException(e);
+			if (this.active) {
+				logger.error("Failed to execute listening task. Will attempt to resubmit in " + this.recoveryInterval
+						+ " milliseconds.", e);
+				this.publishException(e);
+				this.sleepBeforeRecoveryAttempt();
+			}
+			else {
+				logger.debug("Failed to execute listening task. " + e.getClass() + ": " + e.getMessage());
+			}
 			return;
 		}
 
@@ -199,12 +211,17 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 				if (this.serializer != null) {
 					payload = this.serializer.deserialize(value);
 				}
-				message = MessageBuilder.withPayload(payload).build();
+				message = this.getMessageBuilderFactory().withPayload(payload).build();
 			}
 		}
 
 		if (message != null) {
-			this.sendMessage(message);
+			if (this.listening) {
+				this.sendMessage(message);
+			}
+			else {
+				this.boundListOperations.rightPush(value);
+			}
 		}
 	}
 
@@ -227,6 +244,7 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 			}
 			catch (InterruptedException e) {
 				logger.debug("Thread interrupted while sleeping the recovery interval");
+				Thread.currentThread().interrupt();
 			}
 		}
 	}
@@ -248,7 +266,17 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 
 	@Override
 	protected void doStop() {
-		this.active = false;
+		try {
+			this.active = false;
+			this.lifecycleCondition.await(Math.min(this.stopTimeout, this.receiveTimeout), TimeUnit.MICROSECONDS);
+		}
+		catch (InterruptedException e) {
+			logger.debug("Thread interrupted while stopping the endpoint");
+			Thread.currentThread().interrupt();
+		}
+		finally {
+			this.listening = false;
+		}
 	}
 
 	public boolean isListening() {
@@ -280,9 +308,9 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 
 		@Override
 		public void run() {
-			RedisQueueMessageDrivenEndpoint.this.listening = true;
 			try {
 				while (RedisQueueMessageDrivenEndpoint.this.active) {
+					RedisQueueMessageDrivenEndpoint.this.listening = true;
 					RedisQueueMessageDrivenEndpoint.this.popMessageAndSend();
 				}
 			}
@@ -291,7 +319,13 @@ public class RedisQueueMessageDrivenEndpoint extends MessageProducerSupport impl
 					RedisQueueMessageDrivenEndpoint.this.restart();
 				}
 				else {
-					RedisQueueMessageDrivenEndpoint.this.listening = false;
+					RedisQueueMessageDrivenEndpoint.this.lifecycleLock.lock();
+					try {
+						RedisQueueMessageDrivenEndpoint.this.lifecycleCondition.signalAll();
+					}
+					finally {
+						RedisQueueMessageDrivenEndpoint.this.lifecycleLock.unlock();
+					}
 				}
 			}
 		}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,13 +30,14 @@ import org.hamcrest.Factory;
 import org.hamcrest.Matcher;
 import org.junit.Test;
 
-import org.springframework.integration.Message;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.integration.message.MessageMatcher;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.support.json.JacksonJsonObjectMapperProvider;
 import org.springframework.integration.support.json.JsonInboundMessageMapper;
 import org.springframework.integration.support.json.JsonInboundMessageMapper.JsonMessageParser;
 import org.springframework.integration.support.json.JsonObjectMapper;
+import org.springframework.messaging.Message;
 
 /**
  * @author Jeremy Grelle
@@ -47,7 +48,7 @@ import org.springframework.integration.support.json.JsonObjectMapper;
  */
 public abstract class AbstractJsonInboundMessageMapperTests {
 
-	private final JsonObjectMapper<?> mapper = JacksonJsonObjectMapperProvider.newInstance();
+	private final JsonObjectMapper<?, ?> mapper = JacksonJsonObjectMapperProvider.newInstance();
 
 	@Factory
     public static Matcher<Message<?>> sameExceptImmutableHeaders(Message<?> operand) {

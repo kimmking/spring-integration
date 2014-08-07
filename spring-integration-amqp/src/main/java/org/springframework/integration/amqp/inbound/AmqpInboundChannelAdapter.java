@@ -18,17 +18,20 @@ package org.springframework.integration.amqp.inbound;
 
 import java.util.Map;
 
+import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageListener;
+import org.springframework.amqp.rabbit.core.ChannelAwareMessageListener;
 import org.springframework.amqp.rabbit.listener.AbstractMessageListenerContainer;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.amqp.support.converter.SimpleMessageConverter;
+import org.springframework.integration.amqp.AmqpHeaders;
 import org.springframework.integration.amqp.support.AmqpHeaderMapper;
 import org.springframework.integration.amqp.support.DefaultAmqpHeaderMapper;
 import org.springframework.integration.context.OrderlyShutdownCapable;
 import org.springframework.integration.endpoint.MessageProducerSupport;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.util.Assert;
+
+import com.rabbitmq.client.Channel;
 
 /**
  * Adapter that receives Messages from an AMQP Queue, converts them into
@@ -68,12 +71,23 @@ public class AmqpInboundChannelAdapter extends MessageProducerSupport implements
 	}
 
 	@Override
+	public String getComponentType() {
+		return "amqp:inbound-channel-adapter";
+	}
+
+	@Override
 	protected void onInit() {
-		this.messageListenerContainer.setMessageListener(new MessageListener() {
-			public void onMessage(Message message) {
+		this.messageListenerContainer.setMessageListener(new ChannelAwareMessageListener() {
+
+			@Override
+			public void onMessage(Message message, Channel channel) throws Exception {
 				Object payload = messageConverter.fromMessage(message);
-				Map<String, ?> headers = headerMapper.toHeadersFromRequest(message.getMessageProperties());
-				sendMessage(MessageBuilder.withPayload(payload).copyHeaders(headers).build());
+				Map<String, Object> headers = headerMapper.toHeadersFromRequest(message.getMessageProperties());
+				if (messageListenerContainer.getAcknowledgeMode() == AcknowledgeMode.MANUAL) {
+					headers.put(AmqpHeaders.DELIVERY_TAG, message.getMessageProperties().getDeliveryTag());
+					headers.put(AmqpHeaders.CHANNEL, channel);
+				}
+				sendMessage(AmqpInboundChannelAdapter.this.getMessageBuilderFactory().withPayload(payload).copyHeaders(headers).build());
 			}
 		});
 		this.messageListenerContainer.afterPropertiesSet();
@@ -96,6 +110,7 @@ public class AmqpInboundChannelAdapter extends MessageProducerSupport implements
 	 * <p>
 	 * Shuts down the listener container.
 	 */
+	@Override
 	public int beforeShutdown() {
 		this.stop();
 		return 0;
@@ -106,6 +121,7 @@ public class AmqpInboundChannelAdapter extends MessageProducerSupport implements
 	 * {@inheritDoc}
 	 * <p>No-op
 	 */
+	@Override
 	public int afterShutdown() {
 		return 0;
 	}

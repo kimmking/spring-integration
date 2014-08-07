@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,17 +32,19 @@ import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.gateway.MessagingGatewaySupport;
 import org.springframework.integration.history.TrackableComponent;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.utils.IntegrationUtils;
 import org.springframework.jms.listener.SessionAwareMessageListener;
 import org.springframework.jms.support.JmsUtils;
 import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.jms.support.converter.SimpleMessageConverter;
 import org.springframework.jms.support.destination.DestinationResolver;
 import org.springframework.jms.support.destination.DynamicDestinationResolver;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.util.Assert;
 
 /**
@@ -88,8 +90,12 @@ public class ChannelPublishingJmsMessageListener
 
 	private volatile BeanFactory beanFactory;
 
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
 	/**
 	 * Specify whether a JMS reply Message is expected.
+	 *
+	 * @param expectReply true if a reply is expected.
 	 */
 	public void setExpectReply(boolean expectReply) {
 		this.expectReply = expectReply;
@@ -138,6 +144,8 @@ public class ChannelPublishingJmsMessageListener
 	 * Set the default reply destination to send reply messages to. This will
 	 * be applied in case of a request message that does not carry a
 	 * "JMSReplyTo" field.
+	 *
+	 * @param defaultReplyDestination The default reply destination.
 	 */
 	public void setDefaultReplyDestination(Destination defaultReplyDestination) {
 		this.defaultReplyDestination = defaultReplyDestination;
@@ -148,6 +156,9 @@ public class ChannelPublishingJmsMessageListener
 	 * This will be applied in case of a request message that does not carry a
 	 * "JMSReplyTo" field.
 	 * <p>Alternatively, specify a JMS Destination object as "defaultReplyDestination".
+	 *
+	 * @param destinationName The default reply destination name.
+	 *
 	 * @see #setDestinationResolver
 	 * @see #setDefaultReplyDestination(javax.jms.Destination)
 	 */
@@ -160,6 +171,9 @@ public class ChannelPublishingJmsMessageListener
 	 * This will be applied in case of a request message that does not carry a
 	 * "JMSReplyTo" field.
 	 * <p>Alternatively, specify a JMS Destination object as "defaultReplyDestination".
+	 *
+	 * @param destinationName The default reply topic name.
+	 *
 	 * @see #setDestinationResolver
 	 * @see #setDefaultReplyDestination(javax.jms.Destination)
 	 */
@@ -169,6 +183,9 @@ public class ChannelPublishingJmsMessageListener
 
 	/**
 	 * Specify the time-to-live property for JMS reply Messages.
+	 *
+	 * @param replyTimeToLive The reply time to live.
+	 *
 	 * @see javax.jms.MessageProducer#setTimeToLive(long)
 	 */
 	public void setReplyTimeToLive(long replyTimeToLive) {
@@ -177,6 +194,9 @@ public class ChannelPublishingJmsMessageListener
 
 	/**
 	 * Specify the priority value for JMS reply Messages.
+	 *
+	 * @param replyPriority The reply priority.
+	 *
 	 * @see javax.jms.MessageProducer#setPriority(int)
 	 */
 	public void setReplyPriority(int replyPriority) {
@@ -185,6 +205,9 @@ public class ChannelPublishingJmsMessageListener
 
 	/**
 	 * Specify the delivery mode for JMS reply Messages.
+	 *
+	 * @param replyDeliveryPersistent true for a persistent reply message.
+	 *
 	 * @see javax.jms.MessageProducer#setDeliveryMode(int)
 	 */
 	public void setReplyDeliveryPersistent(boolean replyDeliveryPersistent) {
@@ -201,6 +224,8 @@ public class ChannelPublishingJmsMessageListener
 	 * instead, then this value should be set to "JMSCorrelationID".
 	 * Any other value will be treated as a JMS String Property to be copied as-is
 	 * from the request Message into the reply Message with the same property name.
+	 *
+	 * @param correlationKey The correlation key.
 	 */
 	public void setCorrelationKey(String correlationKey) {
 		this.correlationKey = correlationKey;
@@ -209,6 +234,8 @@ public class ChannelPublishingJmsMessageListener
 	/**
 	 * Specify whether explicit QoS should be enabled for replies
 	 * (for timeToLive, priority, and deliveryMode settings).
+	 *
+	 * @param explicitQosEnabledForReplies true to enable explicit QoS.
 	 */
 	public void setExplicitQosEnabledForReplies(boolean explicitQosEnabledForReplies) {
 		this.explicitQosEnabledForReplies = explicitQosEnabledForReplies;
@@ -219,6 +246,9 @@ public class ChannelPublishingJmsMessageListener
 	 * destination names for this listener.
 	 * <p>The default resolver is a DynamicDestinationResolver. Specify a
 	 * JndiDestinationResolver for resolving destination names as JNDI locations.
+	 *
+	 * @param destinationResolver The destination resolver.
+	 *
 	 * @see org.springframework.jms.support.destination.DynamicDestinationResolver
 	 * @see org.springframework.jms.support.destination.JndiDestinationResolver
 	 */
@@ -233,7 +263,7 @@ public class ChannelPublishingJmsMessageListener
 	 * If none is provided, a {@link SimpleMessageConverter} will
 	 * be used.
 	 *
-	 * @param messageConverter
+	 * @param messageConverter The message converter.
 	 */
 	public void setMessageConverter(MessageConverter messageConverter) {
 		this.messageConverter = messageConverter;
@@ -243,6 +273,8 @@ public class ChannelPublishingJmsMessageListener
 	 * Provide a {@link JmsHeaderMapper} implementation to use when
 	 * converting between JMS Messages and Spring Integration Messages.
 	 * If none is provided, a {@link DefaultJmsHeaderMapper} will be used.
+	 *
+	 * @param headerMapper The header mapper.
 	 */
 	public void setHeaderMapper(JmsHeaderMapper headerMapper) {
 		this.headerMapper = headerMapper;
@@ -253,6 +285,8 @@ public class ChannelPublishingJmsMessageListener
 	 * to converting into a Spring Integration Message. This value is set to
 	 * <code>true</code> by default. To send the JMS Message itself as a
 	 * Spring Integration Message payload, set this to <code>false</code>.
+	 *
+	 * @param extractRequestPayload true if the request payload should be extracted.
 	 */
 	public void setExtractRequestPayload(boolean extractRequestPayload) {
 		this.extractRequestPayload = extractRequestPayload;
@@ -263,6 +297,8 @@ public class ChannelPublishingJmsMessageListener
 	 * extracted prior to converting into a JMS Message. This value is set to
 	 * <code>true</code> by default. To send the Spring Integration Message
 	 * itself as the JMS Message's body, set this to <code>false</code>.
+	 *
+	 * @param extractReplyPayload true if the reply payload should be extracted.
 	 */
 	public void setExtractReplyPayload(boolean extractReplyPayload) {
 		this.extractReplyPayload = extractReplyPayload;
@@ -285,8 +321,8 @@ public class ChannelPublishingJmsMessageListener
 
 		Map<String, Object> headers = headerMapper.toHeaders(jmsMessage);
 		Message<?> requestMessage = (result instanceof Message<?>) ?
-				MessageBuilder.fromMessage((Message<?>) result).copyHeaders(headers).build() :
-				MessageBuilder.withPayload(result).copyHeaders(headers).build();
+				this.messageBuilderFactory.fromMessage((Message<?>) result).copyHeaders(headers).build() :
+				this.messageBuilderFactory.withPayload(result).copyHeaders(headers).build();
 		if (!this.expectReply) {
 			this.gatewayDelegate.send(requestMessage);
 		}
@@ -325,6 +361,7 @@ public class ChannelPublishingJmsMessageListener
 			this.gatewayDelegate.setBeanFactory(this.beanFactory);
 		}
 		this.gatewayDelegate.afterPropertiesSet();
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(this.beanFactory);
 	}
 
 	protected void start(){
@@ -386,6 +423,7 @@ public class ChannelPublishingJmsMessageListener
 	/**
 	 * Resolve the default reply destination into a JMS {@link Destination}, using this
 	 * listener's {@link DestinationResolver} in case of a destination name.
+	 * @param session The session.
 	 * @return the located {@link Destination}
 	 * @throws javax.jms.JMSException if resolution failed
 	 * @see #setDefaultReplyDestination

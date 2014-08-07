@@ -32,16 +32,16 @@ import org.junit.Test;
 
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageHandlingException;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.messaging.MessageHandlingException;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.core.MessageHandler;
 import org.springframework.integration.store.MessageGroup;
 import org.springframework.integration.store.MessageGroupStore;
 import org.springframework.integration.store.SimpleMessageStore;
 import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessageHeaders;
 
 /**
  * @author Mark Fisher
@@ -54,7 +54,7 @@ public class ConcurrentAggregatorTests {
 
 	private AggregatingMessageHandler aggregator;
 
-	private MessageGroupStore store = new SimpleMessageStore();
+	private final MessageGroupStore store = new SimpleMessageStore();
 
 
 	@Before
@@ -283,34 +283,6 @@ public class ConcurrentAggregatorTests {
 		assertThat(((Integer) reply.getPayload()), is(105));
 	}
 
-	@Test
-	public void testNullReturningAggregator() throws InterruptedException {
-		this.aggregator = new AggregatingMessageHandler(new NullReturningMessageProcessor(), new SimpleMessageStore(
-						50));
-		QueueChannel replyChannel = new QueueChannel();
-		Message<?> message1 = createMessage(3, "ABC", 3, 1, replyChannel, null);
-		Message<?> message2 = createMessage(5, "ABC", 3, 2, replyChannel, null);
-		Message<?> message3 = createMessage(7, "ABC", 3, 3, replyChannel, null);
-		CountDownLatch latch = new CountDownLatch(3);
-		AggregatorTestTask task1 = new AggregatorTestTask(aggregator, message1,
-				latch);
-		this.taskExecutor.execute(task1);
-		AggregatorTestTask task2 = new AggregatorTestTask(aggregator, message2,
-				latch);
-		this.taskExecutor.execute(task2);
-		AggregatorTestTask task3 = new AggregatorTestTask(aggregator, message3,
-				latch);
-		this.taskExecutor.execute(task3);
-
-		assertTrue(latch.await(10, TimeUnit.SECONDS));
-
-		assertNull(task1.getException());
-		assertNull(task2.getException());
-		assertNull(task3.getException());
-		Message<?> reply = replyChannel.receive(1000);
-		assertNull(reply);
-	}
-
 
 	private static Message<?> createMessage(Object payload,
 			Object correlationId, int sequenceSize, int sequenceNumber,
@@ -328,13 +300,13 @@ public class ConcurrentAggregatorTests {
 
 	private static class AggregatorTestTask implements Runnable {
 
-		private MessageHandler aggregator;
+		private final MessageHandler aggregator;
 
-		private Message<?> message;
+		private final Message<?> message;
 
 		private Exception exception;
 
-		private CountDownLatch latch;
+		private final CountDownLatch latch;
 
 		AggregatorTestTask(MessageHandler aggregator, Message<?> message,
 				CountDownLatch latch) {

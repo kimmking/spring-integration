@@ -16,14 +16,14 @@
 
 package org.springframework.integration.core;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 
 /**
  * Strategy interface for message selection.
- * 
+ *
  * @author Mark Fisher
  */
-public interface MessageSelector {
+public interface MessageSelector extends GenericSelector<Message<?>> {
 
 	boolean accept(Message<?> message);
 

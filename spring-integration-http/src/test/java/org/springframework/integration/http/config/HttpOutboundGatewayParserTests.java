@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,14 @@ package org.springframework.integration.http.config;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.util.Map;
 
+import org.hamcrest.Matchers;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.BeansException;
@@ -40,12 +42,13 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
+import org.springframework.integration.endpoint.PollingConsumer;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.integration.endpoint.AbstractEndpoint;
 import org.springframework.integration.handler.advice.AbstractRequestHandlerAdvice;
 import org.springframework.integration.http.outbound.HttpRequestExecutingMessageHandler;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -56,6 +59,7 @@ import org.springframework.web.client.ResponseErrorHandler;
  * @author Mark Fisher
  * @author Gary Russell
  * @author Artem Bilan
+ * @author Biju Kunjummen
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration
@@ -72,6 +76,9 @@ public class HttpOutboundGatewayParserTests {
 
 	@Autowired @Qualifier("withAdvice")
 	private AbstractEndpoint withAdvice;
+
+	@Autowired @Qualifier("withPoller1")
+	private AbstractEndpoint withPoller1;
 
 	@Autowired
 	private ApplicationContext applicationContext;
@@ -170,6 +177,14 @@ public class HttpOutboundGatewayParserTests {
 		assertEquals("UTF-8", handlerAccessor.getPropertyValue("charset"));
 		assertEquals(true, handlerAccessor.getPropertyValue("extractPayload"));
 		assertEquals(false, handlerAccessor.getPropertyValue("transferCookies"));
+
+		//INT-3055
+		Object uriVariablesExpression = handlerAccessor.getPropertyValue("uriVariablesExpression");
+		assertNotNull(uriVariablesExpression);
+		assertEquals("@uriVariables", ((Expression) uriVariablesExpression).getExpressionString());
+		Object uriVariableExpressions = handlerAccessor.getPropertyValue("uriVariableExpressions");
+		assertNotNull(uriVariableExpressions);
+		assertTrue(((Map<?, ?>) uriVariableExpressions).isEmpty());
 	}
 
 	@Test
@@ -190,6 +205,11 @@ public class HttpOutboundGatewayParserTests {
 			assertTrue(e instanceof BeanDefinitionParsingException);
 			assertTrue(e.getMessage().contains("'request-channel' attribute isn't allowed for a nested"));
 		}
+	}
+
+	@Test
+	public void withPoller() {
+		assertThat(this.withPoller1, Matchers.instanceOf(PollingConsumer.class));
 	}
 
 

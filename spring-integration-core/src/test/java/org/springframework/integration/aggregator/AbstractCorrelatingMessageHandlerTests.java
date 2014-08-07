@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,12 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.integration.aggregator;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -26,23 +25,27 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
+
 import org.springframework.beans.DirectFieldAccessor;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.store.MessageGroup;
 import org.springframework.integration.store.MessageGroupStore;
+import org.springframework.integration.store.SimpleMessageGroup;
 import org.springframework.integration.store.SimpleMessageStore;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Gary Russell
+ * @author Artem Bilan
  * @since 2.2
  *
  */
@@ -57,6 +60,7 @@ public class AbstractCorrelatingMessageHandlerTests {
 		AbstractCorrelatingMessageHandler handler = new AbstractCorrelatingMessageHandler(
 				new MessageGroupProcessor() {
 
+					@Override
 					public Object processMessageGroup(MessageGroup group) {
 						return group;
 					}
@@ -73,6 +77,7 @@ public class AbstractCorrelatingMessageHandlerTests {
 		 */
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
 
+			@Override
 			public void run() {
 				try {
 					waitReapStartLatch.await(10, TimeUnit.SECONDS);
@@ -98,6 +103,7 @@ public class AbstractCorrelatingMessageHandlerTests {
 			/*
 			 * Executes when group 'bar' completes normally
 			 */
+			@Override
 			public boolean send(Message<?> message, long timeout) {
 				outputMessages.add(message);
 				// wake reaper
@@ -115,12 +121,14 @@ public class AbstractCorrelatingMessageHandlerTests {
 				return true;
 			}
 
+			@Override
 			public boolean send(Message<?> message) {
 				return this.send(message, 0);
 			}
 		});
 		handler.setReleaseStrategy(new ReleaseStrategy() {
 
+			@Override
 			public boolean canRelease(MessageGroup group) {
 				return group.size() == 2;
 			}
@@ -162,6 +170,7 @@ public class AbstractCorrelatingMessageHandlerTests {
 		AggregatingMessageHandler handler = new AggregatingMessageHandler(
 				new MessageGroupProcessor() {
 
+					@Override
 					public Object processMessageGroup(MessageGroup group) {
 						return group;
 					}
@@ -174,17 +183,20 @@ public class AbstractCorrelatingMessageHandlerTests {
 			/*
 			 * Executes when group 'bar' completes normally
 			 */
+			@Override
 			public boolean send(Message<?> message, long timeout) {
 				outputMessages.add(message);
 				return true;
 			}
 
+			@Override
 			public boolean send(Message<?> message) {
 				return this.send(message, 0);
 			}
 		});
 		handler.setReleaseStrategy(new ReleaseStrategy() {
 
+			@Override
 			public boolean canRelease(MessageGroup group) {
 				return group.size() == 1;
 			}
@@ -208,6 +220,7 @@ public class AbstractCorrelatingMessageHandlerTests {
 		AggregatingMessageHandler handler = new AggregatingMessageHandler(
 				new MessageGroupProcessor() {
 
+					@Override
 					public Object processMessageGroup(MessageGroup group) {
 						return group;
 					}
@@ -220,17 +233,20 @@ public class AbstractCorrelatingMessageHandlerTests {
 			/*
 			 * Executes when group 'bar' completes normally
 			 */
+			@Override
 			public boolean send(Message<?> message, long timeout) {
 				outputMessages.add(message);
 				return true;
 			}
 
+			@Override
 			public boolean send(Message<?> message) {
 				return this.send(message, 0);
 			}
 		});
 		handler.setReleaseStrategy(new ReleaseStrategy() {
 
+			@Override
 			public boolean canRelease(MessageGroup group) {
 				return group.size() == 1;
 			}
@@ -258,6 +274,7 @@ public class AbstractCorrelatingMessageHandlerTests {
 		MessageGroupProcessor mgp = new DefaultAggregatingMessageGroupProcessor();
 		AggregatingMessageHandler handler = new AggregatingMessageHandler(mgp);
 		handler.setReleaseStrategy(new ReleaseStrategy() {
+			@Override
 			public boolean canRelease(MessageGroup group) {
 				return true;
 			}
@@ -265,7 +282,8 @@ public class AbstractCorrelatingMessageHandlerTests {
 		QueueChannel outputChannel = new QueueChannel();
 		handler.setOutputChannel(outputChannel);
 		MessageGroupStore mgs = TestUtils.getPropertyValue(handler, "messageStore", MessageGroupStore.class);
-		Method forceComplete = AbstractCorrelatingMessageHandler.class.getDeclaredMethod("forceComplete", MessageGroup.class);
+		Method forceComplete =
+				AbstractCorrelatingMessageHandler.class.getDeclaredMethod("forceComplete", MessageGroup.class);
 		forceComplete.setAccessible(true);
 		mgs.addMessageToGroup("foo", new GenericMessage<String>("foo"));
 		GenericMessage<String> secondMessage = new GenericMessage<String>("bar");
@@ -281,6 +299,168 @@ public class AbstractCorrelatingMessageHandlerTests {
 		assertNotNull(message);
 		Collection<?> payload = (Collection<?>) message.getPayload();
 		assertEquals(1, payload.size());
+	}
+
+	@Test /* INT-3216 */
+	public void testDontReapIfAlreadyComplete() throws Exception {
+		MessageGroupProcessor mgp = new DefaultAggregatingMessageGroupProcessor();
+		AggregatingMessageHandler handler = new AggregatingMessageHandler(mgp);
+		handler.setReleaseStrategy(new ReleaseStrategy() {
+
+			@Override
+			public boolean canRelease(MessageGroup group) {
+				return true;
+			}
+
+		});
+		QueueChannel outputChannel = new QueueChannel();
+		handler.setOutputChannel(outputChannel);
+		MessageGroupStore mgs = TestUtils.getPropertyValue(handler, "messageStore", MessageGroupStore.class);
+		mgs.addMessageToGroup("foo", new GenericMessage<String>("foo"));
+		mgs.completeGroup("foo");
+		mgs = spy(mgs);
+		new DirectFieldAccessor(handler).setPropertyValue("messageStore", mgs);
+		Method forceComplete =
+				AbstractCorrelatingMessageHandler.class.getDeclaredMethod("forceComplete", MessageGroup.class);
+		forceComplete.setAccessible(true);
+		MessageGroup group = (MessageGroup) TestUtils.getPropertyValue(mgs, "groupIdToMessageGroup", Map.class)
+				.get("foo");
+		assertTrue(group.isComplete());
+		forceComplete.invoke(handler, group);
+		verify(mgs, never()).getMessageGroup("foo");
+		assertNull(outputChannel.receive(0));
+	}
+
+	/*
+	 * INT-3216 - Verifies the complete early exit is taken after a refresh.
+	 */
+	@Test
+	public void testDontReapIfAlreadyCompleteAfterRefetch() throws Exception {
+		MessageGroupProcessor mgp = new DefaultAggregatingMessageGroupProcessor();
+		AggregatingMessageHandler handler = new AggregatingMessageHandler(mgp);
+		handler.setReleaseStrategy(new ReleaseStrategy() {
+
+			@Override
+			public boolean canRelease(MessageGroup group) {
+				return true;
+			}
+
+		});
+		QueueChannel outputChannel = new QueueChannel();
+		handler.setOutputChannel(outputChannel);
+		MessageGroupStore mgs = TestUtils.getPropertyValue(handler, "messageStore", MessageGroupStore.class);
+		mgs.addMessageToGroup("foo", new GenericMessage<String>("foo"));
+		MessageGroup group = new SimpleMessageGroup(mgs.getMessageGroup("foo"));
+		mgs.completeGroup("foo");
+		mgs = spy(mgs);
+		new DirectFieldAccessor(handler).setPropertyValue("messageStore", mgs);
+		Method forceComplete =
+				AbstractCorrelatingMessageHandler.class.getDeclaredMethod("forceComplete", MessageGroup.class);
+		forceComplete.setAccessible(true);
+		MessageGroup groupInStore = (MessageGroup) TestUtils.getPropertyValue(mgs, "groupIdToMessageGroup", Map.class)
+				.get("foo");
+		assertTrue(groupInStore.isComplete());
+		assertFalse(group.isComplete());
+		new DirectFieldAccessor(group).setPropertyValue("lastModified", groupInStore.getLastModified());
+		forceComplete.invoke(handler, group);
+		verify(mgs).getMessageGroup("foo");
+		assertNull(outputChannel.receive(0));
+	}
+
+	/*
+	 * INT-3216 - Verifies we don't complete if it's a completely new group (different timestamp).
+	 */
+	@Test
+	public void testDontReapIfNewGroupFoundDuringRefetch() throws Exception {
+		MessageGroupProcessor mgp = new DefaultAggregatingMessageGroupProcessor();
+		AggregatingMessageHandler handler = new AggregatingMessageHandler(mgp);
+		handler.setReleaseStrategy(new ReleaseStrategy() {
+
+			@Override
+			public boolean canRelease(MessageGroup group) {
+				return true;
+			}
+
+		});
+		QueueChannel outputChannel = new QueueChannel();
+		handler.setOutputChannel(outputChannel);
+		MessageGroupStore mgs = TestUtils.getPropertyValue(handler, "messageStore", MessageGroupStore.class);
+		mgs.addMessageToGroup("foo", new GenericMessage<String>("foo"));
+		MessageGroup group = new SimpleMessageGroup(mgs.getMessageGroup("foo"));
+		mgs = spy(mgs);
+		new DirectFieldAccessor(handler).setPropertyValue("messageStore", mgs);
+		Method forceComplete =
+				AbstractCorrelatingMessageHandler.class.getDeclaredMethod("forceComplete", MessageGroup.class);
+		forceComplete.setAccessible(true);
+		MessageGroup groupInStore = (MessageGroup) TestUtils.getPropertyValue(mgs, "groupIdToMessageGroup", Map.class)
+				.get("foo");
+		assertFalse(groupInStore.isComplete());
+		assertFalse(group.isComplete());
+		DirectFieldAccessor directFieldAccessor = new DirectFieldAccessor(group);
+		directFieldAccessor.setPropertyValue("lastModified", groupInStore.getLastModified());
+		directFieldAccessor.setPropertyValue("timestamp", groupInStore.getTimestamp() - 1);
+		forceComplete.invoke(handler, group);
+		verify(mgs).getMessageGroup("foo");
+		assertNull(outputChannel.receive(0));
+	}
+
+	@Test
+	public void testInt3483DeadlockOnMessageStoreRemoveMessageGroup() throws InterruptedException {
+		final AggregatingMessageHandler handler =
+				new AggregatingMessageHandler(new DefaultAggregatingMessageGroupProcessor());
+		handler.setOutputChannel(new QueueChannel());
+		QueueChannel discardChannel = new QueueChannel();
+		handler.setDiscardChannel(discardChannel);
+		handler.setReleaseStrategy(new ReleaseStrategy() {
+
+			@Override
+			public boolean canRelease(MessageGroup group) {
+				return true;
+			}
+
+		});
+		handler.setExpireGroupsUponTimeout(false);
+		SimpleMessageStore messageStore = new SimpleMessageStore() {
+			@Override
+			public void removeMessageGroup(Object groupId) {
+				throw new RuntimeException("intentional");
+			}
+		};
+		handler.setMessageStore(messageStore);
+		handler.handleMessage(MessageBuilder.withPayload("foo")
+				.setCorrelationId(1)
+				.setSequenceNumber(1)
+				.setSequenceSize(2)
+				.build());
+
+		try {
+			messageStore.expireMessageGroups(0);
+		}
+		catch (Exception e) {
+			//suppress an intentional 'removeMessageGroup' exception
+		}
+		ExecutorService executorService = Executors.newSingleThreadExecutor();
+		executorService.execute(new Runnable() {
+			@Override
+			public void run() {
+				handler.handleMessage(MessageBuilder.withPayload("foo")
+						.setCorrelationId(1)
+						.setSequenceNumber(2)
+						.setSequenceSize(2)
+						.build());
+			}
+		});
+		executorService.shutdown();
+		/* Previously lock for the groupId hasn't been unlocked from the 'forceComplete', because it wasn't
+		 reachable in case of exception from the BasicMessageGroupStore.removeMessageGroup
+		  */
+		assertTrue(executorService.awaitTermination(10, TimeUnit.SECONDS));
+
+		/* Since MessageGroup had been marked as 'complete', but hasn't been removed because of exception,
+		 the second message is discarded
+		  */
+		Message<?> receive = discardChannel.receive(1000);
+		assertNotNull(receive);
 	}
 
 }

@@ -21,8 +21,8 @@ import static org.junit.Assert.assertEquals;
 import java.nio.charset.Charset;
 
 import org.junit.Test;
-import org.springframework.integration.Message;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Mark Fisher

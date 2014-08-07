@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,20 @@
 
 package org.springframework.integration.config.xml;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.w3c.dom.Element;
+
 import org.springframework.beans.factory.config.TypedStringValue;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.xml.ParserContext;
 import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.channel.ExecutorChannel;
+import org.springframework.integration.channel.FixedSubscriberChannel;
 import org.springframework.integration.channel.PriorityChannel;
 import org.springframework.integration.channel.QueueChannel;
 import org.springframework.integration.channel.RendezvousChannel;
 import org.springframework.integration.store.MessageGroupQueue;
 import org.springframework.util.StringUtils;
 import org.springframework.util.xml.DomUtils;
-import org.w3c.dom.Element;
 
 /**
  * Parser for the &lt;channel&gt; element.
@@ -38,20 +38,22 @@ import org.w3c.dom.Element;
  * @author Iwein Fuld
  * @author Oleg Zhurakousky
  * @author Gary Russell
+ * @author Artem Bilan
  */
 public class PointToPointChannelParser extends AbstractChannelParser {
-
-	private final Log logger = LogFactory.getLog(this.getClass());
 
 	@Override
 	protected BeanDefinitionBuilder buildBeanDefinition(Element element, ParserContext parserContext) {
 		BeanDefinitionBuilder builder = null;
 		Element queueElement = null;
+		String fixedSubscriberChannel = element.getAttribute("fixed-subscriber");
+		boolean isFixedSubscriber = "true".equals(fixedSubscriberChannel.trim().toLowerCase());
 
 		// configure a queue-based channel if any queue sub-element is defined
+		String channel = element.getAttribute(ID_ATTRIBUTE);
 		if ((queueElement = DomUtils.getChildElementByTagName(element, "queue")) != null) {
 			builder = BeanDefinitionBuilder.genericBeanDefinition(QueueChannel.class);
-			boolean hasStoreRef = this.parseStoreRef(builder, queueElement, element.getAttribute(ID_ATTRIBUTE));
+			boolean hasStoreRef = this.parseStoreRef(builder, queueElement, channel, false);
 			boolean hasQueueRef = this.parseQueueRef(builder, queueElement);
 			if (!hasStoreRef) {
 				boolean hasCapacity = this.parseQueueCapacity(builder, queueElement);
@@ -74,6 +76,15 @@ public class PointToPointChannelParser extends AbstractChannelParser {
 			if (StringUtils.hasText(comparatorRef)) {
 				builder.addConstructorArgReference(comparatorRef);
 			}
+			if (parseStoreRef(builder, queueElement, channel, true)) {
+				if (StringUtils.hasText(comparatorRef)) {
+					parserContext.getReaderContext().error(
+							"The 'message-store' attribute is not allowed" + " when providing a 'comparator' to a priority queue.",
+							element);
+				}
+				builder.getRawBeanDefinition().setBeanClass(QueueChannel.class);
+			}
+
 		}
 		else if ((queueElement = DomUtils.getChildElementByTagName(element, "rendezvous-queue")) != null) {
 			builder = BeanDefinitionBuilder.genericBeanDefinition(RendezvousChannel.class);
@@ -81,53 +92,33 @@ public class PointToPointChannelParser extends AbstractChannelParser {
 
 		Element dispatcherElement = DomUtils.getChildElementByTagName(element, "dispatcher");
 
-		// check for the dispatcher attribute (deprecated)
-		String dispatcherAttribute = element.getAttribute("dispatcher");
-		boolean hasDispatcherAttribute = StringUtils.hasText(dispatcherAttribute);
-		if (hasDispatcherAttribute && logger.isWarnEnabled()) {
-			logger.warn("The 'dispatcher' attribute on the 'channel' element is deprecated. "
-					+ "Please use the 'dispatcher' sub-element instead.");
-		}
-
 		// verify that a dispatcher is not provided if a queue sub-element exists
-		if (queueElement != null && (dispatcherElement != null || hasDispatcherAttribute)) {
+		if (queueElement != null && dispatcherElement != null) {
 			parserContext.getReaderContext().error(
-					"The 'dispatcher' attribute or sub-element " + "and any queue sub-element are mutually exclusive.",
-					element);
+					"The 'dispatcher' sub-element and any queue sub-element are mutually exclusive.", element);
 			return null;
 		}
 
 		if (queueElement != null) {
+			if (isFixedSubscriber) {
+				parserContext.getReaderContext().error(
+						"The 'fixed-subscriber' attribute is not allowed when a <queue/> child element is present.",
+						element);
+			}
 			return builder;
 		}
 
-		if (dispatcherElement != null && hasDispatcherAttribute) {
-			parserContext.getReaderContext().error(
-					"The 'dispatcher' attribute and 'dispatcher' "
-							+ "sub-element are mutually exclusive. NOTE: the attribute is DEPRECATED. "
-							+ "Please use the dispatcher sub-element instead.", element);
-			return null;
-		}
-
-		if (hasDispatcherAttribute) {
-			// this attribute is deprecated, but if set, we need to create a DirectChannel
-			// without any LoadBalancerStrategy and the failover flag set to true (default).
-			builder = BeanDefinitionBuilder.genericBeanDefinition(DirectChannel.class);
-			if ("failover".equals(dispatcherAttribute)) {
-				// round-robin dispatcher is used by default, the "failover" value simply disables it
-				builder.addConstructorArgValue(null);
-			}
-		}
-		else if (dispatcherElement == null) {
+		if (dispatcherElement == null) {
 			// configure the default DirectChannel with a RoundRobinLoadBalancingStrategy
-			builder = BeanDefinitionBuilder.genericBeanDefinition(DirectChannel.class);
-			String maxSubscribers = this.getDefaultMaxSubscribers(parserContext,
-					IntegrationNamespaceUtils.DEFAULT_MAX_UNICAST_SUBSCRIBERS_PROPERTY_NAME);
-			if (maxSubscribers != null) {
-				builder.addPropertyValue("maxSubscribers", maxSubscribers);
-			}
+			builder = BeanDefinitionBuilder.genericBeanDefinition(isFixedSubscriber ? FixedSubscriberChannel.class
+					: DirectChannel.class);
 		}
 		else {
+			if (isFixedSubscriber) {
+				parserContext.getReaderContext().error(
+						"The 'fixed-subscriber' attribute is not allowed when a <dispatcher/> child element is present.",
+						element);
+			}
 			// configure either an ExecutorChannel or DirectChannel based on existence of 'task-executor'
 			String taskExecutor = dispatcherElement.getAttribute("task-executor");
 			if (StringUtils.hasText(taskExecutor)) {
@@ -137,15 +128,24 @@ public class PointToPointChannelParser extends AbstractChannelParser {
 			else {
 				builder = BeanDefinitionBuilder.genericBeanDefinition(DirectChannel.class);
 			}
-			// unless the 'load-balancer' attribute is explicitly set to 'none',
+			// unless the 'load-balancer' attribute is explicitly set to 'none' or 'load-balancer-ref' is explicitly configured,
 			// configure the default RoundRobinLoadBalancingStrategy
 			String loadBalancer = dispatcherElement.getAttribute("load-balancer");
-			if ("none".equals(loadBalancer)) {
-				builder.addConstructorArgValue(null);
+			String loadBalancerRef = dispatcherElement.getAttribute("load-balancer-ref");
+			if (StringUtils.hasText(loadBalancer) && StringUtils.hasText(loadBalancerRef)){
+				parserContext.getReaderContext().error("'load-balancer' and 'load-balancer-ref' are mutually exclusive", element);
 			}
+			if (StringUtils.hasText(loadBalancerRef)){
+				builder.addConstructorArgReference(loadBalancerRef);
+			}
+			else {
+				if ("none".equals(loadBalancer)) {
+					builder.addConstructorArgValue(null);
+				}
+			}
+
 			IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, dispatcherElement, "failover");
-			this.setMaxSubscribersProperty(parserContext, builder, dispatcherElement,
-					IntegrationNamespaceUtils.DEFAULT_MAX_UNICAST_SUBSCRIBERS_PROPERTY_NAME);
+			IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, dispatcherElement, "max-subscribers");
 		}
 		return builder;
 	}
@@ -168,13 +168,14 @@ public class PointToPointChannelParser extends AbstractChannelParser {
 		return false;
 	}
 
-	private boolean parseStoreRef(BeanDefinitionBuilder builder, Element queueElement, String channel) {
+	private boolean parseStoreRef(BeanDefinitionBuilder builder, Element queueElement, String channel, boolean priority) {
 		String storeRef = queueElement.getAttribute("message-store");
 		if (StringUtils.hasText(storeRef)) {
 			BeanDefinitionBuilder queueBuilder = BeanDefinitionBuilder
 					.genericBeanDefinition(MessageGroupQueue.class);
 			queueBuilder.addConstructorArgReference(storeRef);
 			queueBuilder.addConstructorArgValue(new TypedStringValue(storeRef).getValue() + ":" + channel);
+			queueBuilder.addPropertyValue("priority", priority);
 			parseQueueCapacity(queueBuilder, queueElement);
 			builder.addConstructorArgValue(queueBuilder.getBeanDefinition());
 			return true;

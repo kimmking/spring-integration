@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,14 +32,15 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.channel.QueueChannel;
 import org.springframework.integration.redis.inbound.RedisInboundChannelAdapter;
 import org.springframework.integration.redis.rules.RedisAvailable;
 import org.springframework.integration.redis.rules.RedisAvailableTests;
 import org.springframework.integration.support.converter.SimpleMessageConverter;
+import org.springframework.integration.support.utils.IntegrationUtils;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -77,13 +78,16 @@ public class RedisInboundChannelAdapterParserTests extends RedisAvailableTests {
 		Object bean = context.getBean("withoutSerializer.adapter");
 		assertNotNull(bean);
 		assertNull(TestUtils.getPropertyValue(bean, "serializer"));
+		Object mbf = context.getBean(IntegrationUtils.INTEGRATION_MESSAGE_BUILDER_FACTORY_BEAN_NAME);
+		assertSame(mbf, TestUtils.getPropertyValue(bean, "messageConverter.messageBuilderFactory"));
 	}
 
 	@Test
 	@RedisAvailable
 	public void testInboundChannelAdapterMessaging() throws Exception {
 		RedisInboundChannelAdapter adapter = context.getBean("adapter", RedisInboundChannelAdapter.class);
-		this.awaitContainerSubscribedWithPatterns(TestUtils.getPropertyValue(adapter, "container", RedisMessageListenerContainer.class));
+		this.awaitContainerSubscribedWithPatterns(TestUtils.getPropertyValue(adapter, "container",
+				RedisMessageListenerContainer.class));
 
 		RedisConnectionFactory connectionFactory = this.getConnectionFactoryForTest();
 

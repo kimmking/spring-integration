@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +18,12 @@ package org.springframework.integration.rmi;
 
 import java.io.Serializable;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageHandlingException;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.gateway.RequestReplyExchanger;
 import org.springframework.integration.handler.AbstractReplyProducingMessageHandler;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandlingException;
+import org.springframework.messaging.MessagingException;
 import org.springframework.remoting.RemoteAccessException;
 import org.springframework.remoting.rmi.RmiProxyFactoryBean;
 
@@ -49,18 +48,23 @@ public class RmiOutboundGateway extends AbstractReplyProducingMessageHandler {
 	}
 
 	@Override
+	public String getComponentType() {
+		return "rmi:outbound-gateway";
+	}
+
+	@Override
 	public final Object handleRequestMessage(Message<?> message) {
 		if (!(message.getPayload() instanceof Serializable)) {
 			throw new MessageHandlingException(message,
-					this.getClass().getName() + " expects a Serializable payload type " +
+					this.getComponentName() + " expects a Serializable payload type " +
 					"but encountered [" + message.getPayload().getClass().getName() + "]");
 		}
-		Message<?> requestMessage = MessageBuilder.withPayload(message.getPayload())
+		Message<?> requestMessage = this.getMessageBuilderFactory().withPayload(message.getPayload())
 				.copyHeaders(message.getHeaders()).build();
 		try {
 			Message<?> reply = this.proxy.exchange(requestMessage);
 			if (reply != null) {
-				reply = MessageBuilder.fromMessage(reply).copyHeadersIfAbsent(message.getHeaders()).build();
+				reply = this.getMessageBuilderFactory().fromMessage(reply).copyHeadersIfAbsent(message.getHeaders()).build();
 			}
 			return reply;
 		}
@@ -68,7 +72,7 @@ public class RmiOutboundGateway extends AbstractReplyProducingMessageHandler {
 			throw new MessageHandlingException(message, e);
 		}
 		catch (RemoteAccessException e) {
-			throw new MessageHandlingException(message, "remote failure in RmiOutboundGateway", e);
+			throw new MessageHandlingException(message, "Remote failure in RmiOutboundGateway: " + this.getComponentName(), e);
 		}
 	}
 

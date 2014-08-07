@@ -23,15 +23,20 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHandlingException;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.integration.ip.IpHeaders;
 import org.springframework.integration.ip.util.RegexUtils;
 import org.springframework.integration.mapping.InboundMessageMapper;
 import org.springframework.integration.mapping.MessageMappingException;
 import org.springframework.integration.mapping.OutboundMessageMapper;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandlingException;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.util.Assert;
 
 /**
@@ -56,7 +61,8 @@ import org.springframework.util.Assert;
  * @author Dave Syer
  * @since 2.0
  */
-public class DatagramPacketMessageMapper implements InboundMessageMapper<DatagramPacket>, OutboundMessageMapper<DatagramPacket> {
+public class DatagramPacketMessageMapper implements InboundMessageMapper<DatagramPacket>, OutboundMessageMapper<DatagramPacket>,
+		BeanFactoryAware {
 
 	private volatile String charset = "UTF-8";
 
@@ -68,12 +74,13 @@ public class DatagramPacketMessageMapper implements InboundMessageMapper<Datagra
 
 	private boolean lookupHost = true;
 
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
 	private static Pattern udpHeadersPattern =
 		Pattern.compile(RegexUtils.escapeRegexSpecials(IpHeaders.ACK_ADDRESS) +
 				"=" + "([^;]*);" +
 				RegexUtils.escapeRegexSpecials(MessageHeaders.ID) +
 				"=" + "([^;]*);");
-
 
 	public void setCharset(String charset) {
 		this.charset = charset;
@@ -98,9 +105,15 @@ public class DatagramPacketMessageMapper implements InboundMessageMapper<Datagra
 		this.lookupHost = lookupHost;
 	}
 
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(beanFactory);
+	}
+
 	/**
 	 * Raw byte[] from message, possibly with a length field up front.
 	 */
+	@Override
 	public DatagramPacket fromMessage(Message<?> message) throws Exception {
 		if (this.acknowledge) {
 			return fromMessageWithAck(message);
@@ -166,6 +179,7 @@ public class DatagramPacketMessageMapper implements InboundMessageMapper<Datagra
 		return bytes;
 	}
 
+	@Override
 	public Message<byte[]> toMessage(DatagramPacket packet) throws Exception {
 		int offset = packet.getOffset();
 		int length = packet.getLength();
@@ -199,7 +213,7 @@ public class DatagramPacketMessageMapper implements InboundMessageMapper<Datagra
 					length = length - matcher.end();
 					payload = new byte[length];
 					System.arraycopy(packet.getData(), offset + matcher.end(), payload, 0, length);
-					message = MessageBuilder.withPayload(payload)
+					message = this.messageBuilderFactory.withPayload(payload)
 							.setHeader(IpHeaders.ACK_ID, UUID.fromString(matcher.group(2)))
 							.setHeader(IpHeaders.ACK_ADDRESS, matcher.group(1))
 							.setHeader(IpHeaders.HOSTNAME, hostName)
@@ -216,7 +230,7 @@ public class DatagramPacketMessageMapper implements InboundMessageMapper<Datagra
 			payload = new byte[length];
 			System.arraycopy(packet.getData(), offset, payload, 0, length);
 			if (payload.length > 0) {
-				message = MessageBuilder.withPayload(payload)
+				message = this.messageBuilderFactory.withPayload(payload)
 						.setHeader(IpHeaders.HOSTNAME, hostName)
 						.setHeader(IpHeaders.IP_ADDRESS, hostAddress)
 						.setHeader(IpHeaders.PORT, port)

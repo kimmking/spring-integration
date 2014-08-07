@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +19,14 @@ import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageHeaders;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageHandler;
 import org.springframework.integration.core.MessagingTemplate;
 import org.springframework.integration.expression.ExpressionUtils;
 import org.springframework.integration.message.AdviceMessage;
-import org.springframework.integration.message.ErrorMessage;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.ErrorMessage;
 import org.springframework.util.Assert;
 
 /**
@@ -35,9 +34,11 @@ import org.springframework.util.Assert;
  * Two expressions 'onSuccessExpression' and 'onFailureExpression' are evaluated when
  * appropriate. If the evaluation returns a result, a message is sent to the onSuccessChannel
  * or onFailureChannel as appropriate; the message is the input message with a header
- * {@link MessageHeaders#POSTPROCESS_RESULT} containing the evaluation result.
+ * {@link org.springframework.integration.IntegrationMessageHeaderAccessor#POSTPROCESS_RESULT} containing the evaluation result.
  * The failure expression is NOT evaluated if the success expression throws an exception.
+ *
  * @author Gary Russell
+ * @author Artem Bilan
  * @since 2.2
  *
  */
@@ -84,7 +85,7 @@ public class ExpressionEvaluatingRequestHandlerAdvice extends AbstractRequestHan
 	/**
 	 * If true, any exception will be caught and null returned.
 	 * Default false.
-	 * @param trapException
+	 * @param trapException true to trap Exceptions.
 	 */
 	public void setTrapException(boolean trapException) {
 		this.trapException = trapException;
@@ -93,7 +94,8 @@ public class ExpressionEvaluatingRequestHandlerAdvice extends AbstractRequestHan
 	/**
 	 * If true, the result of evaluating the onFailureExpression will
 	 * be returned as the result of AbstractReplyProducingMessageHandler.handleRequestMessage(Message).
-	 * @param returnFailureExpressionResult
+	 *
+	 * @param returnFailureExpressionResult true to return the result of the evaluation.
 	 */
 	public void setReturnFailureExpressionResult(boolean returnFailureExpressionResult) {
 		this.returnFailureExpressionResult = returnFailureExpressionResult;
@@ -103,10 +105,18 @@ public class ExpressionEvaluatingRequestHandlerAdvice extends AbstractRequestHan
 	 * If true and an onSuccess expression evaluation fails with an exception, the exception will be thrown to the
 	 * caller. If false, the exception is caught. Default false. Ignored for onFailure expression evaluation - the
 	 * original exception will be propagated (unless trapException is true).
-	 * @param propagateOnSuccessEvaluationFailures
+	 * @param propagateOnSuccessEvaluationFailures The propagateOnSuccessEvaluationFailures to set.
 	 */
 	public void setPropagateEvaluationFailures(boolean propagateOnSuccessEvaluationFailures) {
 		this.propagateOnSuccessEvaluationFailures = propagateOnSuccessEvaluationFailures;
+	}
+
+	@Override
+	protected void onInit() throws Exception {
+		super.onInit();
+		if (this.getBeanFactory() != null) {
+			this.messagingTemplate.setBeanFactory(this.getBeanFactory());
+		}
 	}
 
 	@Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import org.springframework.util.xml.DomUtils;
  * If this component is defined as the top-level element in the Spring application context it will produce
  * an {@link org.springframework.integration.endpoint.AbstractEndpoint} depending on the channel type.
  * If this component is defined as nested element (e.g., inside of the chain) it will produce
- * a {@link org.springframework.integration.core.MessageHandler}.
+ * a {@link org.springframework.messaging.MessageHandler}.
  *
  * @author Mark Fisher
  * @author Gary Russell
@@ -63,6 +63,8 @@ public abstract class AbstractOutboundChannelAdapterParser extends AbstractChann
 		Element pollerElement = DomUtils.getChildElementByTagName(element, "poller");
 		BeanComponentDefinition handlerBeanComponentDefinition = this.doParseAndRegisterConsumer(element, parserContext);
 		builder.addPropertyReference("handler", handlerBeanComponentDefinition.getBeanName());
+		IntegrationNamespaceUtils.checkAndConfigureFixedSubscriberChannel(element, parserContext, channelName,
+				handlerBeanComponentDefinition.getBeanName());
 		if (pollerElement != null) {
 			if (!StringUtils.hasText(channelName)) {
 				parserContext.getReaderContext().error(
@@ -123,17 +125,10 @@ public abstract class AbstractOutboundChannelAdapterParser extends AbstractChann
 	 * Override this method to control the registration process and return the bean name.
 	 * If parsing a bean definition whose name can be auto-generated, consider using
 	 * {@link #parseConsumer(Element, ParserContext)} instead.
-	 * @deprecated Use {@link #doParseAndRegisterConsumer(Element, ParserContext)}
-	 */
-	@Deprecated
-	protected String parseAndRegisterConsumer(Element element, ParserContext parserContext) {
-		return doParseAndRegisterConsumer(element, parserContext).getBeanName();
-	}
-
-	/**
-	 * Override this method to control the registration process and return the bean name.
-	 * If parsing a bean definition whose name can be auto-generated, consider using
-	 * {@link #parseConsumer(Element, ParserContext)} instead.
+	 *
+	 * @param element The element.
+	 * @param parserContext The parser context.
+	 * @return The bean component definition.
 	 */
 	protected BeanComponentDefinition doParseAndRegisterConsumer(Element element, ParserContext parserContext) {
 		AbstractBeanDefinition definition = this.parseConsumer(element, parserContext);
@@ -154,12 +149,17 @@ public abstract class AbstractOutboundChannelAdapterParser extends AbstractChann
 	/**
 	 * Override this method to return the BeanDefinition for the MessageConsumer. It will
 	 * be registered with a generated name.
+	 *
+	 * @param element The element.
+	 * @param parserContext The parser context.
+	 * @return The bean definition.
 	 */
 	protected abstract AbstractBeanDefinition parseConsumer(Element element, ParserContext parserContext);
 
 	/**
 	 * Override this to signal that this channel adapter is actually using a AbstractReplyProducingMessageHandler
 	 * while it is not possible for this parser to determine that because, say, a FactoryBean is being used.
+	 *
 	 * @return false, unless overridden.
 	 */
 	protected boolean isUsingReplyProducer() {

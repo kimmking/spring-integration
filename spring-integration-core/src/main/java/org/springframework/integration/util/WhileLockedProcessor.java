@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,8 @@ package org.springframework.integration.util;
 import java.io.IOException;
 import java.util.concurrent.locks.Lock;
 
-import org.springframework.integration.MessagingException;
+import org.springframework.integration.support.locks.LockRegistry;
+import org.springframework.messaging.MessagingException;
 
 /**
  * A simple strategy callback class that allows you to provide
@@ -58,8 +59,9 @@ public abstract class WhileLockedProcessor {
 
 	/**
 	 * Override this method to provide the behavior that needs to be executed
-	 * while under lock
-	 * @throws IOException
+	 * while under the lock.
+	 *
+	 * @throws IOException Any IOException.
 	 */
 	protected abstract void whileLocked() throws IOException;
 }

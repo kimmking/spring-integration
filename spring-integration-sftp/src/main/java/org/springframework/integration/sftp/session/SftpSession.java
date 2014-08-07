@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ import org.apache.commons.logging.LogFactory;
 
 import org.springframework.core.NestedIOException;
 import org.springframework.integration.file.remote.session.Session;
-import org.springframework.integration.sftp.session.DefaultSftpSessionFactory.JSchSessionWrapper;
 import org.springframework.util.Assert;
 import org.springframework.util.FileCopyUtils;
 
@@ -48,7 +47,7 @@ import com.jcraft.jsch.SftpException;
  * @author Gary Russell
  * @since 2.0
  */
-class SftpSession implements Session<LsEntry> {
+public class SftpSession implements Session<LsEntry> {
 
 	private final Log logger = LogFactory.getLog(this.getClass());
 
@@ -67,7 +66,7 @@ class SftpSession implements Session<LsEntry> {
 		this.wrapper = null;
 	}
 
-	public SftpSession(DefaultSftpSessionFactory.JSchSessionWrapper wrapper) {
+	public SftpSession(JSchSessionWrapper wrapper) {
 		Assert.notNull(wrapper, "wrapper must not be null");
 		this.jschSession = wrapper.getSession();
 		this.wrapper = wrapper;
@@ -161,10 +160,23 @@ class SftpSession implements Session<LsEntry> {
 	}
 
 	@Override
+	public void append(InputStream inputStream, String destination) throws IOException {
+		Assert.state(this.channel != null, "session is not connected");
+		try {
+			this.channel.put(inputStream, destination, ChannelSftp.APPEND);
+		}
+		catch (SftpException e) {
+			throw new NestedIOException("failed to write file", e);
+		}
+	}
+
+	@Override
 	public void close() {
 		this.closed = true;
 		if (this.wrapper != null) {
-			this.channel.disconnect();
+			if (this.channel != null) {
+				this.channel.disconnect();
+			}
 			this.wrapper.close();
 		}
 		else {
@@ -223,6 +235,17 @@ class SftpSession implements Session<LsEntry> {
 	}
 
 	@Override
+	public boolean rmdir(String remoteDirectory) throws IOException {
+		try {
+			this.channel.rmdir(remoteDirectory);
+		}
+		catch (SftpException e) {
+			throw new NestedIOException("failed to remove remote directory '" + remoteDirectory + "'.", e);
+		}
+		return true;
+	}
+
+	@Override
 	public boolean exists(String path) {
 		try {
 			this.channel.lstat(path);
@@ -245,8 +268,14 @@ class SftpSession implements Session<LsEntry> {
 			}
 		}
 		catch (JSchException e) {
+			this.close();
 			throw new IllegalStateException("failed to connect", e);
 		}
+	}
+
+	@Override
+	public ChannelSftp getClientInstance() {
+		return this.channel;
 	}
 
 }

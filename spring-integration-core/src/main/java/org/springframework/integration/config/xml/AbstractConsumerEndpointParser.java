@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ import org.springframework.beans.factory.support.ManagedSet;
 import org.springframework.beans.factory.xml.AbstractBeanDefinitionParser;
 import org.springframework.beans.factory.xml.ParserContext;
 import org.springframework.integration.config.ConsumerEndpointFactoryBean;
+import org.springframework.integration.context.IntegrationContextUtils;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.util.xml.DomUtils;
@@ -68,6 +69,10 @@ public abstract class AbstractConsumerEndpointParser extends AbstractBeanDefinit
 
 	/**
 	 * Parse the MessageHandler.
+	 *
+	 * @param element The element.
+	 * @param parserContext The parser context.
+	 * @return The bean definition builder.
 	 */
 	protected abstract BeanDefinitionBuilder parseHandler(Element element, ParserContext parserContext);
 
@@ -118,9 +123,9 @@ public abstract class AbstractConsumerEndpointParser extends AbstractBeanDefinit
 		String inputChannelName = element.getAttribute(inputChannelAttributeName);
 
 		if (!parserContext.getRegistry().containsBeanDefinition(inputChannelName)) {
-			if (parserContext.getRegistry().containsBeanDefinition(ChannelInitializer.AUTO_CREATE_CHANNEL_CANDIDATES_BEAN_NAME)) {
+			if (parserContext.getRegistry().containsBeanDefinition(IntegrationContextUtils.AUTO_CREATE_CHANNEL_CANDIDATES_BEAN_NAME)) {
 				BeanDefinition channelRegistry = parserContext.getRegistry().
-						getBeanDefinition(ChannelInitializer.AUTO_CREATE_CHANNEL_CANDIDATES_BEAN_NAME);
+						getBeanDefinition(IntegrationContextUtils.AUTO_CREATE_CHANNEL_CANDIDATES_BEAN_NAME);
 				ConstructorArgumentValues caValues = channelRegistry.getConstructorArgumentValues();
 				ValueHolder vh = caValues.getArgumentValue(0, Collection.class);
 				if (vh == null) { //although it should never happen if it does we can fix it
@@ -133,9 +138,11 @@ public abstract class AbstractConsumerEndpointParser extends AbstractBeanDefinit
 			}
 			else {
 				parserContext.getReaderContext().error("Failed to locate '" +
-						ChannelInitializer.AUTO_CREATE_CHANNEL_CANDIDATES_BEAN_NAME + "'", parserContext.getRegistry());
+						IntegrationContextUtils.AUTO_CREATE_CHANNEL_CANDIDATES_BEAN_NAME + "'", parserContext.getRegistry());
 			}
 		}
+		IntegrationNamespaceUtils.checkAndConfigureFixedSubscriberChannel(element, parserContext, inputChannelName,
+				handlerBeanName);
 
 		builder.addPropertyValue("inputChannelName", inputChannelName);
 		List<Element> pollerElementList = DomUtils.getChildElementsByTagName(element, "poller");

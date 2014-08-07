@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import java.lang.annotation.Target;
  * where the annotation attributes can override the default channel settings.
  *
  * <p>A method annotated with @Gateway may accept a single non-annotated
- * parameter of type {@link org.springframework.integration.Message}
+ * parameter of type {@link org.springframework.messaging.Message}
  * or of the intended Message payload type. Method parameters may be mapped
  * to individual Message header values by using the {@link Header @Header}
  * parameter annotation. Alternatively, to pass the entire Message headers
@@ -44,8 +44,9 @@ import java.lang.annotation.Target;
  *
  * @author Mark Fisher
  * @author Gary Russell
+ * @author Artem Bilan
  */
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
@@ -58,5 +59,9 @@ public @interface Gateway {
 	long requestTimeout() default Long.MIN_VALUE;
 
 	long replyTimeout() default Long.MIN_VALUE;
+
+	String payloadExpression() default "";
+
+	GatewayHeader[] headers() default {};
 
 }

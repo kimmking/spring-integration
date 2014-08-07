@@ -1,5 +1,4 @@
 /*
-
  * Copyright 2002-2011 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,11 +17,11 @@
 package org.springframework.integration.handler;
 
 import org.springframework.expression.Expression;
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 import org.springframework.util.Assert;
 
 /**
- * A {@link org.springframework.integration.core.MessageHandler} that evaluates
+ * A {@link org.springframework.messaging.MessageHandler} that evaluates
  * the provided {@link Expression} expecting a <b>void return</b>.
  *
  * @author Artem Bilan

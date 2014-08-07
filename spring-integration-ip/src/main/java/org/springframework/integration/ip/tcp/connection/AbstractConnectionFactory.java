@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,9 +34,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,9 +47,9 @@ import org.springframework.context.ApplicationEventPublisherAware;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.core.serializer.Deserializer;
 import org.springframework.core.serializer.Serializer;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.context.IntegrationObjectSupport;
 import org.springframework.integration.ip.tcp.serializer.ByteArrayCrLfSerializer;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
@@ -60,6 +63,10 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 		implements ConnectionFactory, SmartLifecycle, ApplicationEventPublisherAware {
 
 	protected static final int DEFAULT_REPLY_TIMEOUT = 10000;
+
+	private static final int DEFAULT_NIO_HARVEST_INTERVAL = 2000;
+
+	private static final int DEFAULT_READ_DELAY = 100;
 
 	private volatile String host;
 
@@ -89,9 +96,13 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 
 	private volatile Deserializer<?> deserializer = new ByteArrayCrLfSerializer();
 
+	private volatile boolean deserializerSet;
+
 	private volatile Serializer<?> serializer = new ByteArrayCrLfSerializer();
 
 	private volatile TcpMessageMapper mapper = new TcpMessageMapper();
+
+	private volatile boolean mapperSet;
 
 	private volatile boolean singleUse;
 
@@ -101,7 +112,7 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 
 	private volatile boolean lookupHost = true;
 
-	private volatile List<TcpConnectionSupport> connections = new LinkedList<TcpConnectionSupport>();
+	private final List<TcpConnectionSupport> connections = new LinkedList<TcpConnectionSupport>();
 
 	private volatile TcpSocketSupport tcpSocketSupport = new DefaultTcpSocketSupport();
 
@@ -113,7 +124,9 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 
 	private volatile ApplicationEventPublisher applicationEventPublisher;
 
-	private static final int DEFAULT_NIO_HARVEST_INTERVAL = 2000;
+	private final BlockingQueue<PendingIO> delayedReads = new LinkedBlockingQueue<AbstractConnectionFactory.PendingIO>();
+
+	private volatile long readDelay = DEFAULT_READ_DELAY;
 
 	public AbstractConnectionFactory(int port) {
 		this.port = port;
@@ -128,6 +141,10 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 	@Override
 	public void setApplicationEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
 		this.applicationEventPublisher = applicationEventPublisher;
+		if (!this.deserializerSet && this.deserializer instanceof ApplicationEventPublisherAware) {
+			((ApplicationEventPublisherAware) this.deserializer)
+					.setApplicationEventPublisher(applicationEventPublisher);
+		}
 	}
 
 	protected ApplicationEventPublisher getApplicationEventPublisher() {
@@ -137,7 +154,7 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 	/**
 	 * Sets socket attributes on the socket.
 	 * @param socket The socket.
-	 * @throws SocketException
+	 * @throws SocketException Any SocketException.
 	 */
 	protected void setSocketAttributes(Socket socket) throws SocketException {
 		if (this.soTimeout >= 0) {
@@ -343,6 +360,7 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 	 */
 	public void setDeserializer(Deserializer<?> deserializer) {
 		this.deserializer = deserializer;
+		this.deserializerSet = true;
 	}
 
 	/**
@@ -359,6 +377,7 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 	 */
 	public void setMapper(TcpMessageMapper mapper) {
 		this.mapper = mapper;
+		this.mapperSet = true;
 	}
 
 	/**
@@ -370,7 +389,7 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 
 	/**
 	 * If true, sockets created by this factory will be used once.
-	 * @param singleUse
+	 * @param singleUse The singleUse to set.
 	 */
 	public void setSingleUse(boolean singleUse) {
 		this.singleUse = singleUse;
@@ -409,10 +428,31 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 		this.nioHarvestInterval = nioHarvestInterval;
 	}
 
+	protected BlockingQueue<PendingIO> getDelayedReads() {
+		return delayedReads;
+	}
+
+	protected long getReadDelay() {
+		return readDelay;
+	}
+
 	/**
-	 * Closes the server.
+	 * The delay (in milliseconds) before retrying a read after the previous attempt
+	 * failed due to insufficient threads. Default 100.
+	 * @param readDelay the readDelay to set.
 	 */
-	public abstract void close();
+	public void setReadDelay(long readDelay) {
+		Assert.isTrue(readDelay > 0, "'readDelay' must be positive");
+		this.readDelay = readDelay;
+	}
+
+	@Override
+	protected void onInit() throws Exception {
+		super.onInit();
+		if (!this.mapperSet) {
+			this.mapper.setBeanFactory(this.getBeanFactory());
+		}
+	}
 
 	@Override
 	public void start() {
@@ -423,6 +463,7 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 
 	/**
 	 * Creates a taskExecutor (if one was not provided).
+	 * @return The executor.
 	 */
 	protected Executor getTaskExecutor() {
 		if (!this.active) {
@@ -443,7 +484,6 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 	@Override
 	public void stop() {
 		this.active = false;
-		this.close();
 		synchronized (this.connections) {
 			Iterator<TcpConnectionSupport> iterator = this.connections.iterator();
 			while (iterator.hasNext()) {
@@ -513,13 +553,15 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 	 * Removes closed connections from the connections field, and from the connections parameter.
 	 *
 	 * @param selectionCount Number of IO Events, if 0 we were probably woken up by a close.
-	 * @param selector The selector
-	 * @param connections Map of connections
-	 * @throws IOException
+	 * @param selector The selector.
+	 * @param server The server socket channel.
+	 * @param connections Map of connections.
+	 * @throws IOException Any IOException.
 	 */
 	protected void processNioSelections(int selectionCount, final Selector selector, ServerSocketChannel server,
 			Map<SocketChannel, TcpNioConnection> connections) throws IOException {
-		long now = System.currentTimeMillis();
+		final long now = System.currentTimeMillis();
+		rescheduleDelayedReads(selector, now);
 		if (this.soTimeout > 0 ||
 				now >= this.nextCheckForClosedNioConnections ||
 				selectionCount == 0) {
@@ -578,35 +620,47 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 						logger.debug("Selection key no longer valid");
 					}
 					else if (key.isReadable()) {
-						key.interestOps(key.interestOps() - key.readyOps());
+						key.interestOps(key.interestOps() - SelectionKey.OP_READ);
 						final TcpNioConnection connection;
 						connection = (TcpNioConnection) key.attachment();
 						connection.setLastRead(System.currentTimeMillis());
-						this.taskExecutor.execute(new Runnable() {
-							@Override
-							public void run() {
-								try {
-									connection.readPacket();
-								}
-								catch (Exception e) {
-									if (connection.isOpen()) {
-										logger.error("Exception on read " +
-												connection.getConnectionId() + " " +
-												e.getMessage());
-										connection.close();
+						try {
+							this.taskExecutor.execute(new Runnable() {
+								@Override
+								public void run() {
+									boolean delayed = false;
+									try {
+										connection.readPacket();
 									}
-									else {
-										logger.debug("Connection closed");
+									catch (RejectedExecutionException e) {
+										delayRead(selector, now, key);
+										delayed = true;
 									}
-								}
-								if (key.channel().isOpen()) {
-									key.interestOps(SelectionKey.OP_READ);
-									selector.wakeup();
-								}
-								else {
-									connection.sendExceptionToListener(new EOFException("Connection is closed"));
-								}
-							}});
+									catch (Exception e) {
+										if (connection.isOpen()) {
+											logger.error("Exception on read " +
+													connection.getConnectionId() + " " +
+													e.getMessage());
+											connection.close();
+										}
+										else {
+											logger.debug("Connection closed");
+										}
+									}
+									if (!delayed) {
+										if (key.channel().isOpen()) {
+											key.interestOps(SelectionKey.OP_READ);
+											selector.wakeup();
+										}
+										else {
+											connection.sendExceptionToListener(new EOFException("Connection is closed"));
+										}
+									}
+								}});
+						}
+						catch (RejectedExecutionException e) {
+							delayRead(selector, now, key);
+						}
 					}
 					else if (key.isAcceptable()) {
 						try {
@@ -618,21 +672,78 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 					else {
 						logger.error("Unexpected key: " + key);
 					}
-				} catch (CancelledKeyException e) {
+				}
+				catch (CancelledKeyException e) {
 					if (logger.isDebugEnabled()) {
 						logger.debug("Selection key " + key + " cancelled");
 					}
-				} catch (Exception e) {
+				}
+				catch (Exception e) {
 					logger.error("Exception on selection key " + key, e);
 				}
 			}
 		}
 	}
 
+	protected void delayRead(Selector selector, long now, final SelectionKey key) {
+		TcpNioConnection connection = (TcpNioConnection) key.attachment();
+		if (!this.delayedReads.add(new PendingIO(now, key))) { // should never happen - unbounded queue
+			logger.error("Failed to delay read; closing " + connection.getConnectionId());
+			connection.close();
+		}
+		else {
+			if (logger.isDebugEnabled()) {
+				logger.debug("No threads available, delaying read for " + connection.getConnectionId());
+			}
+			// wake the selector in case it is currently blocked, and waiting for longer than readDelay
+			selector.wakeup();
+		}
+	}
+
 	/**
-	 * @param selector
-	 * @param now
-	 * @throws IOException
+	 * If any reads were delayed due to insufficient threads, reschedule them if
+	 * the readDelay has passed.
+	 * @param selector the selector to wake if necessary.
+	 * @param now the current time.
+	 */
+	private void rescheduleDelayedReads(Selector selector, long now) {
+		boolean wakeSelector = false;
+		try {
+			while (this.delayedReads.size() > 0) {
+				if (this.delayedReads.peek().failedAt + this.readDelay < now) {
+					PendingIO pendingRead = this.delayedReads.take();
+					if (pendingRead.key.channel().isOpen()) {
+						pendingRead.key.interestOps(SelectionKey.OP_READ);
+						wakeSelector = true;
+						if (logger.isDebugEnabled()) {
+							logger.debug("Rescheduling delayed read for " + ((TcpNioConnection) pendingRead.key.attachment()).getConnectionId());
+						}
+					}
+					else {
+						((TcpNioConnection) pendingRead.key.attachment()).sendExceptionToListener(new EOFException("Connection is closed"));
+					}
+				}
+				else {
+					// remaining delayed reads have not expired yet.
+					break;
+				}
+			}
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+		finally {
+			if (wakeSelector) {
+				selector.wakeup();
+			}
+		}
+	}
+
+	/**
+	 * @param selector The selector.
+	 * @param server The server socket channel.
+	 * @param now The current time.
+	 * @throws IOException Any IOException.
 	 */
 	protected void doAccept(final Selector selector, ServerSocketChannel server, long now) throws IOException {
 		throw new UnsupportedOperationException("Nio server factory must override this method");
@@ -766,4 +877,18 @@ public abstract class AbstractConnectionFactory extends IntegrationObjectSupport
 			return closed;
 		}
 	}
+
+	private class PendingIO {
+
+		private final long failedAt;
+
+		private final SelectionKey key;
+
+		private PendingIO(long failedAt, SelectionKey key) {
+			this.failedAt = failedAt;
+			this.key = key;
+		}
+
+	}
+
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2009 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,33 +21,47 @@ import java.io.File;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.integration.file.FileHeaders;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.utils.IntegrationUtils;
 import org.springframework.integration.transformer.Transformer;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
  * Base class for transformers that convert a File payload.
- * 
+ *
  * @author Mark Fisher
  */
-public abstract class AbstractFilePayloadTransformer<T> implements Transformer {
+public abstract class AbstractFilePayloadTransformer<T> implements Transformer, BeanFactoryAware {
 
 	private final Log logger = LogFactory.getLog(this.getClass());
 
 	private volatile boolean deleteFiles;
 
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
 
 	/**
 	 * Specify whether to delete the File after transformation.
 	 * Default is <em>false</em>.
+	 *
+	 * @param deleteFiles true to delete the file.
 	 */
 	public void setDeleteFiles(boolean deleteFiles) {
 		this.deleteFiles = deleteFiles;
 	}
 
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(beanFactory);
+	}
+
+	@Override
 	public final Message<?> transform(Message<?> message) {
 		try {
 			Assert.notNull(message, "Message must not be null");
@@ -56,7 +70,7 @@ public abstract class AbstractFilePayloadTransformer<T> implements Transformer {
 			Assert.isInstanceOf(File.class, payload, "Message payload must be of type [java.io.File]");
 			File file = (File) payload;
 	        T result = this.transformFile(file);
-	        Message<?> transformedMessage = MessageBuilder.withPayload(result)
+	        Message<?> transformedMessage = this.messageBuilderFactory.withPayload(result)
 	        		.copyHeaders(message.getHeaders())
 	        		.setHeaderIfAbsent(FileHeaders.ORIGINAL_FILE, file)
 	        		.setHeaderIfAbsent(FileHeaders.FILENAME, file.getName())
@@ -74,6 +88,10 @@ public abstract class AbstractFilePayloadTransformer<T> implements Transformer {
 
 	/**
 	 * Subclasses must implement this method to transform the File contents.
+	 *
+	 * @param file The file.
+	 * @return The result of the transformation.
+	 * @throws Exception Any Exception.
 	 */
 	protected abstract T transformFile(File file) throws Exception;
 

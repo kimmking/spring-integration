@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.springframework.integration.channel;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Collections;
@@ -25,6 +26,7 @@ import java.util.Date;
 
 import org.junit.Test;
 
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.context.support.ConversionServiceFactoryBean;
 import org.springframework.context.support.GenericApplicationContext;
@@ -32,17 +34,21 @@ import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.core.convert.support.DefaultConversionService;
 import org.springframework.core.convert.support.GenericConversionService;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageDeliveryException;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.context.IntegrationContextUtils;
-import org.springframework.integration.message.ErrorMessage;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.integration.support.converter.DefaultDatatypeChannelMessageConverter;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.ErrorMessage;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Mark Fisher
  * @author Gunnar Hillert
  * @author Artem Bilan
+ * @author Gary Russell
  * @since 2.0
  */
 public class DatatypeChannelTests {
@@ -63,7 +69,9 @@ public class DatatypeChannelTests {
 	public void unsupportedTypeButConversionServiceSupports() {
 		QueueChannel channel = createChannel(Integer.class);
 		ConversionService conversionService = new DefaultConversionService();
-		channel.setConversionService(conversionService);
+		DefaultDatatypeChannelMessageConverter converter = new DefaultDatatypeChannelMessageConverter();
+		converter.setConversionService(conversionService);
+		channel.setMessageConverter(converter);
 		assertTrue(channel.send(new GenericMessage<String>("123")));
 	}
 
@@ -71,7 +79,9 @@ public class DatatypeChannelTests {
 	public void unsupportedTypeAndConversionServiceDoesNotSupport() {
 		QueueChannel channel = createChannel(Integer.class);
 		ConversionService conversionService = new DefaultConversionService();
-		channel.setConversionService(conversionService);
+		DefaultDatatypeChannelMessageConverter converter = new DefaultDatatypeChannelMessageConverter();
+		converter.setConversionService(conversionService);
+		channel.setMessageConverter(converter);
 		assertTrue(channel.send(new GenericMessage<Boolean>(Boolean.TRUE)));
 	}
 
@@ -80,11 +90,14 @@ public class DatatypeChannelTests {
 		QueueChannel channel = createChannel(Integer.class);
 		GenericConversionService conversionService = new DefaultConversionService();
 		conversionService.addConverter(new Converter<Boolean, Integer>() {
+			@Override
 			public Integer convert(Boolean source) {
 				return source ? 1 : 0;
 			}
 		});
-		channel.setConversionService(conversionService);
+		DefaultDatatypeChannelMessageConverter converter = new DefaultDatatypeChannelMessageConverter();
+		converter.setConversionService(conversionService);
+		channel.setMessageConverter(converter);
 		assertTrue(channel.send(new GenericMessage<Boolean>(Boolean.TRUE)));
 		assertEquals(1, channel.receive().getPayload());
 	}
@@ -93,6 +106,7 @@ public class DatatypeChannelTests {
 	public void conversionServiceBeanUsedByDefault() {
 		GenericApplicationContext context = new GenericApplicationContext();
 		Converter<Boolean, Integer> converter = new Converter<Boolean, Integer>() {
+			@Override
 			public Integer convert(Boolean source) {
 				return source ? 1 : 0;
 			}
@@ -100,28 +114,39 @@ public class DatatypeChannelTests {
 		BeanDefinitionBuilder conversionServiceBuilder =
 				BeanDefinitionBuilder.genericBeanDefinition(ConversionServiceFactoryBean.class);
 		conversionServiceBuilder.addPropertyValue("converters", Collections.singleton(converter));
-		context.registerBeanDefinition(IntegrationContextUtils.INTEGRATION_CONVERSION_SERVICE_BEAN_NAME,
+		context.registerBeanDefinition(IntegrationUtils.INTEGRATION_CONVERSION_SERVICE_BEAN_NAME,
 				conversionServiceBuilder.getBeanDefinition());
-		BeanDefinitionBuilder channelBuilder = BeanDefinitionBuilder.genericBeanDefinition(QueueChannel.class);
+		BeanDefinition messageConverter = BeanDefinitionBuilder.genericBeanDefinition(
+				DefaultDatatypeChannelMessageConverter.class).getBeanDefinition();
+		context.registerBeanDefinition(
+				IntegrationContextUtils.INTEGRATION_DATATYPE_CHANNEL_MESSAGE_CONVERTER_BEAN_NAME,
+				messageConverter);
+		BeanDefinitionBuilder channelBuilder = BeanDefinitionBuilder
+				.genericBeanDefinition(QueueChannel.class);
 		channelBuilder.addPropertyValue("datatypes", "java.lang.Integer, java.util.Date");
 		context.registerBeanDefinition("testChannel", channelBuilder.getBeanDefinition());
 		context.refresh();
 
 		QueueChannel channel = context.getBean("testChannel", QueueChannel.class);
+		assertSame(context.getBean(ConversionService.class),
+				TestUtils.getPropertyValue(channel, "messageConverter.conversionService"));
 		assertTrue(channel.send(new GenericMessage<Boolean>(Boolean.TRUE)));
 		assertEquals(1, channel.receive().getPayload());
+		context.close();
 	}
 
 	@Test
 	public void conversionServiceReferenceOverridesDefault() {
 		GenericApplicationContext context = new GenericApplicationContext();
 		Converter<Boolean, Integer> defaultConverter = new Converter<Boolean, Integer>() {
+			@Override
 			public Integer convert(Boolean source) {
 				return source ? 1 : 0;
 			}
 		};
 		GenericConversionService customConversionService = new DefaultConversionService();
 		customConversionService.addConverter(new Converter<Boolean, Integer>() {
+			@Override
 			public Integer convert(Boolean source) {
 				return source ? 99 : -99;
 			}
@@ -130,15 +155,21 @@ public class DatatypeChannelTests {
 				BeanDefinitionBuilder.genericBeanDefinition(ConversionServiceFactoryBean.class);
 		conversionServiceBuilder.addPropertyValue("converters", Collections.singleton(defaultConverter));
 		context.registerBeanDefinition("conversionService", conversionServiceBuilder.getBeanDefinition());
+		BeanDefinitionBuilder messageConverterBuilder = BeanDefinitionBuilder.genericBeanDefinition(
+				DefaultDatatypeChannelMessageConverter.class);
+		messageConverterBuilder.addPropertyValue("conversionService", customConversionService);
+		context.registerBeanDefinition(
+				IntegrationContextUtils.INTEGRATION_DATATYPE_CHANNEL_MESSAGE_CONVERTER_BEAN_NAME,
+				messageConverterBuilder.getBeanDefinition());
 		BeanDefinitionBuilder channelBuilder = BeanDefinitionBuilder.genericBeanDefinition(QueueChannel.class);
 		channelBuilder.addPropertyValue("datatypes", "java.lang.Integer, java.util.Date");
-		channelBuilder.addPropertyValue("conversionService", customConversionService);
 		context.registerBeanDefinition("testChannel", channelBuilder.getBeanDefinition());
 		context.refresh();
 
 		QueueChannel channel = context.getBean("testChannel", QueueChannel.class);
 		assertTrue(channel.send(new GenericMessage<Boolean>(Boolean.TRUE)));
 		assertEquals(99, channel.receive().getPayload());
+		context.close();
 	}
 
 	@Test

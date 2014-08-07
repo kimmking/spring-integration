@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package org.springframework.integration.message;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Date;
@@ -27,15 +28,39 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.junit.Test;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHeaders;
+import org.junit.runner.RunWith;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.MutableMessageBuilder;
+import org.springframework.integration.support.MutableMessageBuilderFacfory;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.support.GenericMessage;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 /**
  * @author Mark Fisher
+ * @author Gary Russell
  */
+@ContextConfiguration
+@RunWith(SpringJUnit4ClassRunner.class)
 public class MessageBuilderTests {
-	
+
+	@Autowired
+	private MessageChannel in;
+
+	@Autowired
+	private PollableChannel out;
+
+	@Autowired
+	private MessageBuilderFactory messageBuilderFactory;
+
 	@Test(expected= IllegalArgumentException.class) // priority must be an Integer
 	public void testPriorityHeader(){
 		MessageBuilder.withPayload("ha").setHeader("priority", "10").build();
@@ -119,10 +144,53 @@ public class MessageBuilderTests {
 	}
 
 	@Test
+	public void mutate() {
+		assertTrue(messageBuilderFactory instanceof MutableMessageBuilderFacfory);
+		in.send(new GenericMessage<String>("foo"));
+		Message<?> m1 = out.receive(0);
+		Message<?> m2 = out.receive(0);
+		assertEquals("org.springframework.integration.support.MutableMessage", m1.getClass().getName());
+		assertTrue(m1 == m2);
+	}
+
+	@Test
+	public void mutable() {
+		MutableMessageBuilder<String> builder = MutableMessageBuilder.withPayload("test");
+		Message<String> message1 = builder
+				.setHeader("foo", "bar").build();
+		Message<String> message2 = MutableMessageBuilder.fromMessage(message1).setHeader("another", 1).build();
+		assertEquals("bar", message2.getHeaders().get("foo"));
+		assertSame(message1.getHeaders().getId(), message2.getHeaders().getId());
+		assertTrue(message2 == message1);
+	}
+
+	@Test
+	public void mutableFromImmutable() {
+		Message<String> message1 = MessageBuilder.withPayload("test")
+				.setHeader("foo", "bar").build();
+		Message<String> message2 = MutableMessageBuilder.fromMessage(message1).setHeader("another", 1).build();
+		assertEquals("bar", message2.getHeaders().get("foo"));
+		assertSame(message1.getHeaders().getId(), message2.getHeaders().getId());
+		assertNotSame(message1, message2);
+		assertFalse(message2 == message1);
+	}
+
+	@Test
+	public void mutableFromImmutableMutate() {
+		Message<String> message1 = MessageBuilder.withPayload("test")
+				.setHeader("foo", "bar").build();
+		Message<String> message2 = new MutableMessageBuilderFacfory().fromMessage(message1).setHeader("another", 1).build();
+		assertEquals("bar", message2.getHeaders().get("foo"));
+		assertSame(message1.getHeaders().getId(), message2.getHeaders().getId());
+		assertNotSame(message1, message2);
+		assertFalse(message2 == message1);
+	}
+
+	@Test
 	public void testPriority() {
 		Message<Integer> importantMessage = MessageBuilder.withPayload(1)
 			.setPriority(123).build();
-		assertEquals(new Integer(123), importantMessage.getHeaders().getPriority());
+		assertEquals(new Integer(123), new IntegrationMessageHeaderAccessor(importantMessage).getPriority());
 	}
 
 	@Test
@@ -130,9 +198,9 @@ public class MessageBuilderTests {
 		Message<Integer> message1 = MessageBuilder.withPayload(1)
 			.setPriority(42).build();
 		Message<Integer> message2 = MessageBuilder.fromMessage(message1)
-			.setHeaderIfAbsent(MessageHeaders.PRIORITY, 13)
+			.setHeaderIfAbsent(IntegrationMessageHeaderAccessor.PRIORITY, 13)
 			.build();
-		assertEquals(new Integer(42), message2.getHeaders().getPriority());
+		assertEquals(new Integer(42), new IntegrationMessageHeaderAccessor(message2).getPriority());
 	}
 
 	@Test
@@ -140,7 +208,7 @@ public class MessageBuilderTests {
 		Long past = System.currentTimeMillis() - (60 * 1000);
 		Message<Integer> expiredMessage = MessageBuilder.withPayload(1)
 				.setExpirationDate(past).build();
-		assertEquals(past, expiredMessage.getHeaders().getExpirationDate()); 
+		assertEquals(past, new IntegrationMessageHeaderAccessor(expiredMessage).getExpirationDate());
 	}
 
 	@Test
@@ -148,7 +216,7 @@ public class MessageBuilderTests {
 		Long past = System.currentTimeMillis() - (60 * 1000);
 		Message<Integer> expiredMessage = MessageBuilder.withPayload(1)
 				.setExpirationDate(new Date(past)).build();
-		assertEquals(past, expiredMessage.getHeaders().getExpirationDate()); 
+		assertEquals(past, new IntegrationMessageHeaderAccessor(expiredMessage).getExpirationDate());
 	}
 
 	@Test
@@ -170,43 +238,81 @@ public class MessageBuilderTests {
 			.build();
 		assertFalse(message2.getHeaders().containsKey("foo"));
 	}
-	
+
 	@Test
 	public void testPushAndPopSequenceDetails() throws Exception {
 		Message<Integer> message1 = MessageBuilder.withPayload(1).pushSequenceDetails("foo", 1, 2).build();
-		assertFalse(message1.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message1.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 		Message<Integer> message2 = MessageBuilder.fromMessage(message1).pushSequenceDetails("bar", 1, 1).build();
-		assertTrue(message2.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertTrue(message2.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 		Message<Integer> message3 = MessageBuilder.fromMessage(message2).popSequenceDetails().build();
-		assertFalse(message3.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message3.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 	}
 
 	@Test
 	public void testPushAndPopSequenceDetailsWhenNoCorrelationId() throws Exception {
 		Message<Integer> message1 = MessageBuilder.withPayload(1).build();
-		assertFalse(message1.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message1.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 		Message<Integer> message2 = MessageBuilder.fromMessage(message1).pushSequenceDetails("bar", 1, 1).build();
-		assertFalse(message2.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message2.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 		Message<Integer> message3 = MessageBuilder.fromMessage(message2).popSequenceDetails().build();
-		assertFalse(message3.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message3.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 	}
 
 	@Test
 	public void testPopSequenceDetailsWhenNotPopped() throws Exception {
 		Message<Integer> message1 = MessageBuilder.withPayload(1).build();
-		assertFalse(message1.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message1.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 		Message<Integer> message2 = MessageBuilder.fromMessage(message1).popSequenceDetails().build();
-		assertFalse(message2.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message2.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 	}
 
 	@Test
 	public void testPushAndPopSequenceDetailsWhenNoSequence() throws Exception {
 		Message<Integer> message1 = MessageBuilder.withPayload(1).setCorrelationId("foo").build();
-		assertFalse(message1.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message1.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 		Message<Integer> message2 = MessageBuilder.fromMessage(message1).pushSequenceDetails("bar", 1, 1).build();
-		assertTrue(message2.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertTrue(message2.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 		Message<Integer> message3 = MessageBuilder.fromMessage(message2).popSequenceDetails().build();
-		assertFalse(message3.getHeaders().containsKey(MessageHeaders.SEQUENCE_DETAILS));
+		assertFalse(message3.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+	}
+
+	@Test
+	public void testPushAndPopSequenceDetailsMutable() throws Exception {
+		Message<Integer> message1 = MutableMessageBuilder.withPayload(1).pushSequenceDetails("foo", 1, 2).build();
+		assertFalse(message1.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+		Message<Integer> message2 = MutableMessageBuilder.fromMessage(message1).pushSequenceDetails("bar", 1, 1).build();
+		assertTrue(message2.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+		Message<Integer> message3 = MutableMessageBuilder.fromMessage(message2).popSequenceDetails().build();
+		assertFalse(message3.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+	}
+
+	@Test
+	public void testPushAndPopSequenceDetailsWhenNoCorrelationIdMutable() throws Exception {
+		Message<Integer> message1 = MutableMessageBuilder.withPayload(1).build();
+		assertFalse(message1.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+		Message<Integer> message2 = MutableMessageBuilder.fromMessage(message1).pushSequenceDetails("bar", 1, 1).build();
+		assertFalse(message2.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+		Message<Integer> message3 = MutableMessageBuilder.fromMessage(message2).popSequenceDetails().build();
+		assertFalse(message3.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+	}
+
+	@Test
+	public void testPopSequenceDetailsWhenNotPoppedMutable() throws Exception {
+		Message<Integer> message1 = MutableMessageBuilder.withPayload(1).build();
+		assertFalse(message1.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+		Message<Integer> message2 = MutableMessageBuilder.fromMessage(message1).popSequenceDetails().build();
+		assertFalse(message2.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+	}
+
+	@Test
+	public void testPushAndPopSequenceDetailsWhenNoSequenceMutable() throws Exception {
+		Message<Integer> message1 = MutableMessageBuilder.withPayload(1).setCorrelationId("foo").build();
+		assertFalse(message1.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+		Message<Integer> message2 = MutableMessageBuilder.fromMessage(message1).pushSequenceDetails("bar", 1, 1).build();
+		assertTrue(message2.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
+		Message<Integer> message3 = MutableMessageBuilder.fromMessage(message2).popSequenceDetails().build();
+		assertFalse(message3.getHeaders().containsKey(IntegrationMessageHeaderAccessor.SEQUENCE_DETAILS));
 	}
 
 	@Test
@@ -240,7 +346,7 @@ public class MessageBuilderTests {
 		Map<String, Object> newHeaders = new HashMap<String, Object>();
 		newHeaders.put("a", 123);
 		newHeaders.put("b", "xyz");
-		newHeaders.put("c", current);		
+		newHeaders.put("c", current);
 		Message<?> result = MessageBuilder.fromMessage(original).copyHeaders(newHeaders).build();
 		assertEquals(original, result);
 	}

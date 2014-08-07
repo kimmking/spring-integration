@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,21 +22,24 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 
 import org.aopalliance.aop.Advice;
+
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.factory.BeanClassLoaderAware;
 import org.springframework.core.task.SyncTaskExecutor;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHandlingException;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.channel.MessagePublishingErrorHandler;
-import org.springframework.integration.message.ErrorMessage;
 import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
 import org.springframework.integration.transaction.ExpressionEvaluatingTransactionSynchronizationProcessor;
 import org.springframework.integration.transaction.IntegrationResourceHolder;
+import org.springframework.integration.transaction.IntegrationResourceHolderSynchronization;
 import org.springframework.integration.transaction.TransactionSynchronizationFactory;
 import org.springframework.integration.util.ErrorHandlingTaskExecutor;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandlingException;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.ErrorMessage;
 import org.springframework.scheduling.Trigger;
 import org.springframework.scheduling.support.PeriodicTrigger;
+import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
@@ -47,6 +50,7 @@ import org.springframework.util.ErrorHandler;
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  * @author Gary Russell
+ * @author Artem Bilan
  */
 public abstract class AbstractPollingEndpoint extends AbstractEndpoint implements BeanClassLoaderAware {
 
@@ -73,7 +77,7 @@ public abstract class AbstractPollingEndpoint extends AbstractEndpoint implement
 	private volatile TransactionSynchronizationFactory transactionSynchronizationFactory;
 
 	public AbstractPollingEndpoint() {
-		this.setPhase(Integer.MAX_VALUE);
+		this.setPhase(Integer.MAX_VALUE / 2);
 	}
 
 	public void setTaskExecutor(Executor taskExecutor) {
@@ -96,6 +100,7 @@ public abstract class AbstractPollingEndpoint extends AbstractEndpoint implement
 		this.errorHandler = errorHandler;
 	}
 
+	@Override
 	public void setBeanClassLoader(ClassLoader classLoader) {
 		this.beanClassLoader = classLoader;
 	}
@@ -139,6 +144,7 @@ public abstract class AbstractPollingEndpoint extends AbstractEndpoint implement
 	private Runnable createPoller() throws Exception {
 
 		Callable<Boolean> pollingTask = new Callable<Boolean>() {
+			@Override
 			public Boolean call() throws Exception {
 				return doPoll();
 			}
@@ -237,19 +243,22 @@ public abstract class AbstractPollingEndpoint extends AbstractEndpoint implement
 	}
 
 	private IntegrationResourceHolder bindResourceHolderIfNecessary(String key, Object resource) {
-		IntegrationResourceHolder holder = null;
 
 		if (this.transactionSynchronizationFactory != null && resource != null) {
 			if (TransactionSynchronizationManager.isActualTransactionActive()) {
-				holder = new IntegrationResourceHolder();
-				if (key != null) {
-					holder.addAttribute(key, resource);
+				TransactionSynchronization synchronization = this.transactionSynchronizationFactory.create(resource);
+				TransactionSynchronizationManager.registerSynchronization(synchronization);
+				if (synchronization instanceof IntegrationResourceHolderSynchronization) {
+					IntegrationResourceHolder holder =
+							((IntegrationResourceHolderSynchronization) synchronization).getResourceHolder();
+					if (key != null) {
+						holder.addAttribute(key, resource);
+					}
+					return holder;
 				}
-				TransactionSynchronizationManager.bindResource(resource, holder);
-				TransactionSynchronizationManager.registerSynchronization(this.transactionSynchronizationFactory.create(resource));
 			}
 		}
-		return holder;
+		return null;
 	}
 
 	/**
@@ -264,8 +273,10 @@ public abstract class AbstractPollingEndpoint extends AbstractEndpoint implement
 			this.pollingTask = pollingTask;
 		}
 
+		@Override
 		public void run() {
 			taskExecutor.execute(new Runnable() {
+				@Override
 				public void run() {
 					int count = 0;
 					while (initialized && (maxMessagesPerPoll <= 0 || count < maxMessagesPerPoll)) {
@@ -280,13 +291,14 @@ public abstract class AbstractPollingEndpoint extends AbstractEndpoint implement
 								throw (RuntimeException) e;
 							}
 							else {
-								throw new MessageHandlingException(new ErrorMessage(e));
+								throw new MessageHandlingException(new ErrorMessage(e), e);
 							}
 						}
 					}
 				}
 			});
 		}
+
 	}
 
 }

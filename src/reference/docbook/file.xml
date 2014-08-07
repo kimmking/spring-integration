@@ -28,7 +28,7 @@
       This is an implementation of <interfacename>MessageSource</interfacename> that creates messages from
       a file system directory. <programlisting language="xml"><![CDATA[<bean id="pollableFileSource"
     class="org.springframework.integration.file.FileReadingMessageSource"
-    p:inputDirectory="${input.directory}"/>]]></programlisting>
+    p:directory="${input.directory}"/>]]></programlisting>
     </para>
     <para>
       To prevent creating messages for certain files, you may supply a
@@ -36,12 +36,21 @@
       <classname>AcceptOnceFileListFilter</classname> is used. This filter
       ensures files are picked up only once from the directory.
       <note>
+       <para>
         The <classname>AcceptOnceFileListFilter</classname> stores its state in memory. If you wish the
         state to survive a system restart, consider using the
         <classname>FileSystemPersistentAcceptOnceFileListFilter</classname> instead. This filter stores
-        the accepted file names in a <interfacename>MetadataStore</interfacename>. The framework supplies
-        several store implementations (such as Redis), or you can provide your own. This filter matches on
-        the filename and modified time.
+        the accepted file names in a <interfacename>MetadataStore</interfacename> implementation
+        (<xref linkend="metadata-store"/>).
+        This filter matches on the filename and modified time.
+       </para>
+       <para>
+        Since <emphasis>version 4.0</emphasis>, this filter requires a <interfacename
+        >ConcurrentMetadataStore</interfacename>. When used with a shared data store
+        (such as <code>Redis</code> with the <classname>RedisMetadataStore</classname>) this allows
+        filter keys to be shared across multiple application instances, or when a network
+        file share is being used by multiple servers.
+       </para>
       </note>
       <programlisting language="xml"><![CDATA[<bean id="pollableFileSource"
     class="org.springframework.integration.file.FileReadingMessageSource"
@@ -168,7 +177,8 @@
         <section id="file-tailing">
           <title>'Tail'ing Files</title>
           <para>
-            Another popular use case is to get 'lines' from the end (or tail) of a file. Two implementations are provided;
+            Another popular use case is to get 'lines' from the end (or tail) of a file, capturing new lines when
+            they are added. Two implementations are provided;
             the first, <classname>OSDelegatingFileTailingMessageProducer</classname>, uses the native <code>tail</code>
             command (on operating systems that have one). This is likely the most efficient implementation on those
             platforms. For operating systems that do not have a <code>tail</code> command, the second implementation
@@ -213,12 +223,12 @@
           </para>
           <programlisting language="xml"><![CDATA[<int-file:tail-inbound-channel-adapter id="native"
 	channel="input"
-	native-options="-F -n 6"
+	native-options="-F -n +0"
 	task-executor="exec"
 	file-delay=10000
 	file="/tmp/foo"/>]]></programlisting>
           <para>
-            This creates a native adapter with '-F -n 6' options (follow the file name, emit up to 6 lines before the current end).
+            This creates a native adapter with '-F -n +0' options (follow the file name, emitting all existing lines).
             If the tail command fails (on some platforms, a missing file causes the <code>tail</code> to fail, even with
             <code>-F</code> specified), the command will be retried every 10 seconds.
           </para>
@@ -231,11 +241,18 @@
 	reopen="true"
 	file-delay="10000"/>]]></programlisting>
           <para>
-            This creates a commons-io <classname>Tailer</classname> adapter that examines the file for new lines every
+            This creates an Apache commons-io <classname>Tailer</classname> adapter that examines the file for new lines every
             2 seconds, and checks for existence of a missing file every 10 seconds. The file will be tailed from the
             beginning (<code>end="false"</code>) instead of the end (which is the default). The file will be
             reopened for each chunk (the default is to keep the file open).
           </para>
+          <important>
+            <para>
+              Specifying the <code>delay</code>, <code>end</code> or <code>reopen</code> attributes,
+              forces the use of the Apache commons-io adapter and the <code>native-options</code> attribute is not
+              allowed.
+            </para>
+          </important>
         </section>
   </section>
 	<section id="file-writing">
@@ -432,7 +449,7 @@
 			<para><emphasis>FAIL</emphasis></para>
 			<para>
 				If the target file exists, a
-				<ulink url="http://static.springsource.org/spring-integration/api/org/springframework/integration/MessageHandlingException.html">MessageHandlingException</ulink>
+				<ulink url="http://docs.spring.io/spring/docs/current/javadoc-api/org/springframework/messaging/MessageHandlingException.html">MessageHandlingException</ulink>
 				is thrown.
 			</para>
 			<para><emphasis>IGNORE</emphasis></para>

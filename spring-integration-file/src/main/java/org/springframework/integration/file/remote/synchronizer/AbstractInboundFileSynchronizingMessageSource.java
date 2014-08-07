@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,15 +22,14 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.regex.Pattern;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageSource;
-import org.springframework.integration.endpoint.MessageProducerSupport;
+import org.springframework.integration.endpoint.AbstractMessageSource;
 import org.springframework.integration.file.FileReadingMessageSource;
 import org.springframework.integration.file.filters.AcceptOnceFileListFilter;
 import org.springframework.integration.file.filters.CompositeFileListFilter;
 import org.springframework.integration.file.filters.FileListFilter;
 import org.springframework.integration.file.filters.RegexPatternFileListFilter;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
@@ -55,8 +54,7 @@ import org.springframework.util.Assert;
  * @author Oleg Zhurakousky
  * @author Gary Russell
  */
-public abstract class AbstractInboundFileSynchronizingMessageSource<F> extends MessageProducerSupport
-	implements MessageSource<File> {
+public abstract class AbstractInboundFileSynchronizingMessageSource<F> extends AbstractMessageSource<File> {
 
 	/**
 	 * Should the endpoint attempt to create the local directory? True by default.
@@ -86,7 +84,8 @@ public abstract class AbstractInboundFileSynchronizingMessageSource<F> extends M
 		this(synchronizer, null);
 	}
 
-	public AbstractInboundFileSynchronizingMessageSource(AbstractInboundFileSynchronizer<F> synchronizer, Comparator<File> comparator) {
+	public AbstractInboundFileSynchronizingMessageSource(AbstractInboundFileSynchronizer<F> synchronizer,
+			Comparator<File> comparator) {
 		Assert.notNull(synchronizer, "synchronizer must not be null");
 		this.synchronizer = synchronizer;
 		if (comparator == null){
@@ -114,14 +113,16 @@ public abstract class AbstractInboundFileSynchronizingMessageSource<F> extends M
 	 * <p>
 	 * The default is an {@link AcceptOnceFileListFilter} which filters duplicate file
 	 * names (processed during the current execution).
-	 * @param localFileListFilter
+	 *
+	 * @param localFileListFilter The local file list filter.
 	 */
 	public void setLocalFilter(FileListFilter<File> localFileListFilter) {
 		this.localFileListFilter = localFileListFilter;
 	}
 
 	@Override
-	protected void onInit() {
+	public void afterPropertiesSet() throws Exception {
+		super.afterPropertiesSet();
 		Assert.notNull(this.localDirectory, "localDirectory must not be null");
 		try {
 			if (!this.localDirectory.exists()) {
@@ -137,6 +138,9 @@ public abstract class AbstractInboundFileSynchronizingMessageSource<F> extends M
 			}
 			this.fileSource.setDirectory(this.localDirectory);
 			this.fileSource.setFilter(this.buildFilter());
+			if (this.getBeanFactory() != null) {
+				this.fileSource.setBeanFactory(this.getBeanFactory());
+			}
 			this.fileSource.afterPropertiesSet();
 			this.synchronizer.afterPropertiesSet();
 		}
@@ -145,7 +149,7 @@ public abstract class AbstractInboundFileSynchronizingMessageSource<F> extends M
 		}
 		catch (Exception e) {
 			throw new MessagingException(
-					"Failure during initialization of MessageSource for: " + this.getComponentType(), e);
+					"Failure during initialization of MessageSource for: " + this.getClass(), e);
 		}
 	}
 
@@ -154,7 +158,8 @@ public abstract class AbstractInboundFileSynchronizingMessageSource<F> extends M
 	 * If the result is null, it attempts to sync up with the remote directory to populate the file source.
 	 * Then, it polls the file source again and returns the result, whether or not it is null.
 	 */
-	public final Message<File> receive() {
+	@Override
+	public final Message<File> doReceive() {
 		Assert.state(this.fileSource != null, "fileSource must not be null");
 		Assert.state(this.synchronizer != null, "synchronizer must not be null");
 		Message<File> message = this.fileSource.receive();

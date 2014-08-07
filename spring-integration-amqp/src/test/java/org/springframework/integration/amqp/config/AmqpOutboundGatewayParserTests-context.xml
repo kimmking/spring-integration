@@ -39,7 +39,9 @@
 		exchange-name="si.test.exchange"
 		routing-key="si.test.binding"
 		amqp-template="amqpTemplate"
+		lazy-connect="false"
 		order="5"
+		default-delivery-mode="NON_PERSISTENT"
 		requires-reply="false"
 		mapped-request-headers="foo*"
 		mapped-reply-headers="bar*"/>

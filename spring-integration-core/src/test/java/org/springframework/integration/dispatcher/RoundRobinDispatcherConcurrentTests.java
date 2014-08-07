@@ -1,4 +1,4 @@
-/* Copyright 2002-2009 the original author or authors.
+/* Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,10 +31,10 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 import org.springframework.integration.MessageRejectedException;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageHandler;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 
@@ -144,7 +144,7 @@ public class RoundRobinDispatcherConcurrentTests {
 	public void noHandlerSkipUnderConcurrentFailureWithFailover() throws Exception {
 		dispatcher.addHandler(handler1);
 		dispatcher.addHandler(handler2);
-		doThrow(new MessageRejectedException(message)).when(handler1).handleMessage(message);
+		doThrow(new MessageRejectedException(message, null)).when(handler1).handleMessage(message);
 		final CountDownLatch start = new CountDownLatch(1);
 		final CountDownLatch allDone = new CountDownLatch(TOTAL_EXECUTIONS);
 		final Message<?> message = this.message;

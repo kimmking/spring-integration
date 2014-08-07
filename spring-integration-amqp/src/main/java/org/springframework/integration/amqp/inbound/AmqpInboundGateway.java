@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,28 +19,31 @@ package org.springframework.integration.amqp.inbound;
 import java.util.Map;
 
 import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Address;
 import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageListener;
 import org.springframework.amqp.core.MessagePostProcessor;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.ChannelAwareMessageListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.AbstractMessageListenerContainer;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.amqp.support.converter.SimpleMessageConverter;
+import org.springframework.integration.amqp.AmqpHeaders;
 import org.springframework.integration.amqp.support.AmqpHeaderMapper;
 import org.springframework.integration.amqp.support.DefaultAmqpHeaderMapper;
 import org.springframework.integration.gateway.MessagingGatewaySupport;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
+
+import com.rabbitmq.client.Channel;
 
 /**
  * Adapter that receives Messages from an AMQP Queue, converts them into
  * Spring Integration Messages, and sends the results to a Message Channel.
  * If a reply Message is received, it will be converted and sent back to
  * the AMQP 'replyTo'.
- * 
+ *
  * @author Mark Fisher
  * @since 2.1
  */
@@ -77,14 +80,24 @@ public class AmqpInboundGateway extends MessagingGatewaySupport {
 	}
 
 	@Override
+	public String getComponentType() {
+		return "amqp:inbound-gateway";
+	}
+
+	@Override
 	protected void onInit() throws Exception {
-		this.messageListenerContainer.setMessageListener(new MessageListener() {
-			public void onMessage(Message message) {
+		this.messageListenerContainer.setMessageListener(new ChannelAwareMessageListener() {
+			@Override
+			public void onMessage(Message message, Channel channel) {
 				Object payload = amqpMessageConverter.fromMessage(message);
-				Map<String, ?> headers = headerMapper.toHeadersFromRequest(message.getMessageProperties());
-				org.springframework.integration.Message<?> request =
-						MessageBuilder.withPayload(payload).copyHeaders(headers).build();
-				final org.springframework.integration.Message<?> reply = sendAndReceiveMessage(request);
+				Map<String, Object> headers = headerMapper.toHeadersFromRequest(message.getMessageProperties());
+				if (messageListenerContainer.getAcknowledgeMode() == AcknowledgeMode.MANUAL) {
+					headers.put(AmqpHeaders.DELIVERY_TAG, message.getMessageProperties().getDeliveryTag());
+					headers.put(AmqpHeaders.CHANNEL, channel);
+				}
+				org.springframework.messaging.Message<?> request =
+						AmqpInboundGateway.this.getMessageBuilderFactory().withPayload(payload).copyHeaders(headers).build();
+				final org.springframework.messaging.Message<?> reply = sendAndReceiveMessage(request);
 				if (reply != null) {
 					// TODO: fallback to a reply address property of this gateway
 					Address replyTo = message.getMessageProperties().getReplyToAddress();
@@ -92,6 +105,7 @@ public class AmqpInboundGateway extends MessagingGatewaySupport {
 							"request Message being handled by the AMQP inbound gateway.");
 					amqpTemplate.convertAndSend(replyTo.getExchangeName(), replyTo.getRoutingKey(), reply.getPayload(),
 							new MessagePostProcessor() {
+								@Override
 								public Message postProcessMessage(Message message) throws AmqpException {
 									MessageProperties messageProperties = message.getMessageProperties();
 									String contentEncoding = messageProperties.getContentEncoding();
@@ -113,6 +127,7 @@ public class AmqpInboundGateway extends MessagingGatewaySupport {
 							});
 				}
 			}
+
 		});
 		this.messageListenerContainer.afterPropertiesSet();
 		this.amqpTemplate.afterPropertiesSet();

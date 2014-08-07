@@ -22,9 +22,9 @@ import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.SpelParserConfiguration;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.integration.core.MessageHandler;
 import org.springframework.integration.handler.AbstractReplyProducingMessageHandler;
 import org.springframework.integration.handler.MessageProcessor;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -48,8 +48,6 @@ abstract class AbstractStandardMessageHandlerFactoryBean extends AbstractSimpleM
 	private volatile String targetMethodName;
 
 	private volatile Expression expression;
-
-	private volatile String beanName;
 
 	public void setTargetObject(Object targetObject) {
 		this.targetObject = targetObject;
@@ -87,7 +85,7 @@ abstract class AbstractStandardMessageHandlerFactoryBean extends AbstractSimpleM
 			}
 			else if (targetIsDirectReplyProducingHandler) {
 				if (logger.isDebugEnabled()) {
-					logger.debug("Wiring handler (" + beanName + ") directly into endpoint");
+					logger.debug("Wiring handler (" + targetObject + ") directly into endpoint");
 				}
 				this.checkReuse(actualHandler);
 				this.postProcessReplyProducer(actualHandler);

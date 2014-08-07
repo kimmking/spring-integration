@@ -23,8 +23,7 @@ import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.JsonToken;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
 import org.springframework.util.Assert;
 
 /**
@@ -32,9 +31,12 @@ import org.springframework.util.Assert;
  * and builds a {@link Message} with the specified payload type from provided {@link JsonInboundMessageMapper}.
  * Uses Jackson JSON-processor (@link http://jackson.codehaus.org).
  *
+ * @deprecated Please migrate to {@link Jackson2JsonMessageParser} for Jackson 2.x.
+ *
  * @author Artem Bilan
  * @since 3.0
  */
+@Deprecated
 public class JacksonJsonMessageParser extends AbstractJacksonJsonMessageParser<JsonParser> {
 
 	public JacksonJsonMessageParser() {
@@ -67,7 +69,7 @@ public class JacksonJsonMessageParser extends AbstractJacksonJsonMessageParser<J
 			}
 		}
 		Assert.notNull(headers, error);
-		return MessageBuilder.withPayload(payload).copyHeaders(headers).build();
+		return this.getMessageBuilderFactory().withPayload(payload).copyHeaders(headers).build();
 	}
 
 	private Map<String, Object> readHeaders(JsonParser parser, String jsonMessage) throws Exception {

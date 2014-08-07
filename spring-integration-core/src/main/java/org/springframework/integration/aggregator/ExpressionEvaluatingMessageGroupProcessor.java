@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,16 +21,16 @@ import java.util.Map;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.core.convert.ConversionService;
-import org.springframework.integration.core.MessagingTemplate;
 import org.springframework.integration.store.MessageGroup;
 
 /**
  * A {@link MessageGroupProcessor} implementation that evaluates a SpEL expression. The SpEL context root is the list of
  * all Messages in the group. The evaluation result can be any Object and is send as new Message payload to the output
  * channel.
- * 
+ *
  * @author Alex Peters
  * @author Dave Syer
+ * @author Gary Russell
  */
 public class ExpressionEvaluatingMessageGroupProcessor extends AbstractAggregatingMessageGroupProcessor implements BeanFactoryAware {
 
@@ -41,7 +41,9 @@ public class ExpressionEvaluatingMessageGroupProcessor extends AbstractAggregati
 		processor = new ExpressionEvaluatingMessageListProcessor(expression);
 	}
 
+	@Override
 	public void setBeanFactory(BeanFactory beanFactory) {
+		super.setBeanFactory(beanFactory);
 		processor.setBeanFactory(beanFactory);
 	}
 
@@ -55,7 +57,7 @@ public class ExpressionEvaluatingMessageGroupProcessor extends AbstractAggregati
 
 	/**
 	 * Evaluate the expression provided on the messages (a collection) in the group, and delegate to the
-	 * {@link MessagingTemplate} to send downstream.
+	 * {@link org.springframework.integration.core.MessagingTemplate} to send downstream.
 	 */
 	@Override
 	protected Object aggregatePayloads(MessageGroup group, Map<String, Object> headers) {

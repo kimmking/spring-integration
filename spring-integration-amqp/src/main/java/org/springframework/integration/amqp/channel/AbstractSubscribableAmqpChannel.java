@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,11 @@ package org.springframework.integration.amqp.channel;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.core.MessageListener;
-import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
@@ -29,35 +30,43 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.amqp.support.converter.SimpleMessageConverter;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.context.SmartLifecycle;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageDeliveryException;
 import org.springframework.integration.MessageDispatchingException;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageHandler;
-import org.springframework.integration.core.SubscribableChannel;
+import org.springframework.integration.context.IntegrationProperties;
 import org.springframework.integration.dispatcher.AbstractDispatcher;
 import org.springframework.integration.dispatcher.MessageDispatcher;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageDeliveryException;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.SubscribableChannel;
 import org.springframework.util.Assert;
 
 /**
  * @author Mark Fisher
  * @author Gary Russell
+ * @author Artem Bilan
  * @since 2.1
  */
-abstract class AbstractSubscribableAmqpChannel extends AbstractAmqpChannel implements SubscribableChannel, SmartLifecycle, DisposableBean {
+abstract class AbstractSubscribableAmqpChannel extends AbstractAmqpChannel
+		implements SubscribableChannel, SmartLifecycle, DisposableBean {
 
 	private final String channelName;
 
 	private final SimpleMessageListenerContainer container;
 
-	private volatile MessageDispatcher dispatcher;
+	private volatile AbstractDispatcher dispatcher;
 
 	private final boolean isPubSub;
 
-	private volatile int maxSubscribers = Integer.MAX_VALUE;
+	private volatile Integer maxSubscribers;
 
-	public AbstractSubscribableAmqpChannel(String channelName, SimpleMessageListenerContainer container, AmqpTemplate amqpTemplate) {
+	private final AmqpAdmin admin;
+
+	private final ConnectionFactory connectionFactory;
+
+	public AbstractSubscribableAmqpChannel(String channelName, SimpleMessageListenerContainer container,
+			AmqpTemplate amqpTemplate) {
 		this(channelName, container, amqpTemplate, false);
 	}
 
@@ -70,21 +79,36 @@ abstract class AbstractSubscribableAmqpChannel extends AbstractAmqpChannel imple
 		this.channelName = channelName;
 		this.container = container;
 		this.isPubSub = isPubSub;
+		this.connectionFactory = container.getConnectionFactory();
+		this.admin = new RabbitAdmin(this.connectionFactory);
 	}
 
 	/**
 	 * Specify the maximum number of subscribers supported by the
 	 * channel's dispatcher (if it is an {@link AbstractDispatcher}).
-	 * @param maxSubscribers
+	 * @param maxSubscribers The maximum number of subscribers allowed.
 	 */
 	public void setMaxSubscribers(int maxSubscribers) {
 		this.maxSubscribers = maxSubscribers;
+		if (this.dispatcher != null) {
+			this.dispatcher.setMaxSubscribers(this.maxSubscribers);
+		}
 	}
 
+	protected AmqpAdmin getAdmin() {
+		return admin;
+	}
+
+	protected ConnectionFactory getConnectionFactory() {
+		return connectionFactory;
+	}
+
+	@Override
 	public boolean subscribe(MessageHandler handler) {
 		return this.dispatcher.addHandler(handler);
 	}
 
+	@Override
 	public boolean unsubscribe(MessageHandler handler) {
 		return this.dispatcher.removeHandler(handler);
 	}
@@ -93,26 +117,30 @@ abstract class AbstractSubscribableAmqpChannel extends AbstractAmqpChannel imple
 	public void onInit() throws Exception {
 		super.onInit();
 		this.dispatcher = this.createDispatcher();
-		if (this.dispatcher instanceof AbstractDispatcher) {
-			((AbstractDispatcher) this.dispatcher).setMaxSubscribers(this.maxSubscribers);
+		if (this.maxSubscribers == null) {
+			this.maxSubscribers = this.getIntegrationProperty(this.isPubSub ?
+					IntegrationProperties.CHANNELS_MAX_BROADCAST_SUBSCRIBERS :
+					IntegrationProperties.CHANNELS_MAX_UNICAST_SUBSCRIBERS,
+					Integer.class);
 		}
-		AmqpAdmin admin = new RabbitAdmin(this.container.getConnectionFactory());
-		Queue queue = this.initializeQueue(admin, this.channelName);
-		this.container.setQueues(queue);
+		this.setMaxSubscribers(this.maxSubscribers);
+		String queue = this.obtainQueueName(this.admin, this.channelName);
+		this.container.setQueueNames(queue);
 		MessageConverter converter = (this.getAmqpTemplate() instanceof RabbitTemplate)
 				? ((RabbitTemplate) this.getAmqpTemplate()).getMessageConverter()
 				: new SimpleMessageConverter();
 		MessageListener listener = new DispatchingMessageListener(converter,
-				this.dispatcher, this, this.isPubSub);
+				this.dispatcher, this, this.isPubSub,
+				this.getMessageBuilderFactory());
 		this.container.setMessageListener(listener);
 		if (!this.container.isActive()) {
 			this.container.afterPropertiesSet();
 		}
 	}
 
-	protected abstract MessageDispatcher createDispatcher();
+	protected abstract AbstractDispatcher createDispatcher();
 
-	protected abstract Queue initializeQueue(AmqpAdmin admin, String channelName);
+	protected abstract String obtainQueueName(AmqpAdmin admin, String channelName);
 
 
 	private static class DispatchingMessageListener implements MessageListener {
@@ -127,24 +155,29 @@ abstract class AbstractSubscribableAmqpChannel extends AbstractAmqpChannel imple
 
 		private final boolean isPubSub;
 
+		private final MessageBuilderFactory messageBuilderFactory;
+
 		private DispatchingMessageListener(MessageConverter converter,
-				MessageDispatcher dispatcher, AbstractSubscribableAmqpChannel channel, boolean isPubSub) {
+				MessageDispatcher dispatcher, AbstractSubscribableAmqpChannel channel, boolean isPubSub,
+				MessageBuilderFactory messageBuilderFactory) {
 			Assert.notNull(converter, "MessageConverter must not be null");
 			Assert.notNull(dispatcher, "MessageDispatcher must not be null");
 			this.converter = converter;
 			this.dispatcher = dispatcher;
 			this.channel = channel;
 			this.isPubSub = isPubSub;
+			this.messageBuilderFactory = messageBuilderFactory;
 		}
 
 
+		@Override
 		public void onMessage(org.springframework.amqp.core.Message message) {
 			Message<?> messageToSend = null;
 			try {
 				Object converted = this.converter.fromMessage(message);
 				if (converted != null) {
 					messageToSend = (converted instanceof Message<?>) ? (Message<?>) converted
-							: MessageBuilder.withPayload(converted).build();
+							: this.messageBuilderFactory.withPayload(converted).build();
 					this.dispatcher.dispatch(messageToSend);
 				}
 				else if (this.logger.isWarnEnabled()) {
@@ -166,7 +199,8 @@ abstract class AbstractSubscribableAmqpChannel extends AbstractAmqpChannel imple
 				}
 			}
 			catch (Exception e) {
-				throw new MessagingException("Failure occured in AMQP listener while attempting to convert and dispatch Message.", e);
+				throw new MessagingException("Failure occured in AMQP listener " +
+						"while attempting to convert and dispatch Message.", e);
 			}
 		}
 	}
@@ -176,36 +210,43 @@ abstract class AbstractSubscribableAmqpChannel extends AbstractAmqpChannel imple
 	 * SmartLifecycle implementation (delegates to the MessageListener container)
 	 */
 
+	@Override
 	public boolean isAutoStartup() {
-		return (this.container != null) ? this.container.isAutoStartup() : false;
+		return (this.container != null) && this.container.isAutoStartup();
 	}
 
+	@Override
 	public int getPhase() {
 		return (this.container != null) ? this.container.getPhase() : 0;
 	}
 
+	@Override
 	public boolean isRunning() {
-		return (this.container != null) ? this.container.isRunning() : false;
+		return (this.container != null) && this.container.isRunning();
 	}
 
+	@Override
 	public void start() {
 		if (this.container != null) {
 			this.container.start();
 		}
 	}
 
+	@Override
 	public void stop() {
 		if (this.container != null) {
 			this.container.stop();
 		}
 	}
 
+	@Override
 	public void stop(Runnable callback) {
 		if (this.container != null) {
 			this.container.stop(callback);
 		}
 	}
 
+	@Override
 	public void destroy() throws Exception {
 		if (this.container != null) {
 			this.container.destroy();

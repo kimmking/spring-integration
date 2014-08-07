@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,11 +23,12 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.ApplicationEventPublisherAware;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.core.task.TaskExecutor;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.file.tail.ApacheCommonsFileTailingMessageProducer;
 import org.springframework.integration.file.tail.FileTailingMessageProducerSupport;
 import org.springframework.integration.file.tail.OSDelegatingFileTailingMessageProducer;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
@@ -67,7 +68,9 @@ public class FileTailInboundChannelAdapterFactoryBean extends AbstractFactoryBea
 	private volatile ApplicationEventPublisher applicationEventPublisher;
 
 	public void setNativeOptions(String nativeOptions) {
-		this.nativeOptions = nativeOptions;
+		if (StringUtils.hasText(nativeOptions)) {
+			this.nativeOptions = nativeOptions;
+		}
 	}
 
 	public void setFile(File file) {
@@ -82,11 +85,11 @@ public class FileTailInboundChannelAdapterFactoryBean extends AbstractFactoryBea
 		this.taskScheduler = taskScheduler;
 	}
 
-	public void setDelay(long delay) {
+	public void setDelay(Long delay) {
 		this.delay = delay;
 	}
 
-	public void setFileDelay(long fileDelay) {
+	public void setFileDelay(Long fileDelay) {
 		this.fileDelay = fileDelay;
 	}
 
@@ -180,9 +183,8 @@ public class FileTailInboundChannelAdapterFactoryBean extends AbstractFactoryBea
 			}
 		}
 		else {
-			if (this.nativeOptions != null && StringUtils.hasText(this.nativeOptions) && logger.isWarnEnabled()) {
-				logger.warn("'native-options' are ignored with an Apache commons-io 'Tailer' adapter");
-			}
+			Assert.isTrue(this.nativeOptions == null,
+					 "'native-options' is not allowed with 'delay', 'end', or 'reopen'");
 			adapter = new ApacheCommonsFileTailingMessageProducer();
 			if (this.delay != null) {
 				((ApacheCommonsFileTailingMessageProducer) adapter).setPollingDelay(this.delay);
@@ -214,6 +216,9 @@ public class FileTailInboundChannelAdapterFactoryBean extends AbstractFactoryBea
 		}
 		if (this.applicationEventPublisher != null) {
 			adapter.setApplicationEventPublisher(this.applicationEventPublisher);
+		}
+		if (this.getBeanFactory() != null) {
+			adapter.setBeanFactory(this.getBeanFactory());
 		}
 		adapter.afterPropertiesSet();
 		this.adapter = adapter;

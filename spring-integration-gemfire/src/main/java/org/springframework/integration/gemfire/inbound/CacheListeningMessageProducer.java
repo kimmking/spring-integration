@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+
 import org.springframework.integration.endpoint.ExpressionMessageProducerSupport;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.util.Assert;
 
 import com.gemstone.gemfire.cache.CacheClosedException;
@@ -68,6 +68,10 @@ public class CacheListeningMessageProducer extends ExpressionMessageProducerSupp
 		this.supportedEventTypes = new HashSet<EventType>(Arrays.asList(eventTypes));
 	}
 
+	@Override
+	public String getComponentType() {
+		return "gemfire:inbound-channel-adapter";
+	}
 
 	@Override
 	protected void doStart() {
@@ -128,10 +132,8 @@ public class CacheListeningMessageProducer extends ExpressionMessageProducerSupp
 		}
 
 		private void publish(Object payload) {
-			sendMessage(MessageBuilder.withPayload(payload).build());
+			sendMessage(CacheListeningMessageProducer.this.getMessageBuilderFactory().withPayload(payload).build());
 		}
 	}
-
-
 
 }

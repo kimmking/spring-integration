@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.springframework.integration.ip.udp;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -32,15 +33,17 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.commons.logging.LogFactory;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.springframework.integration.Message;
+
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.core.SubscribableChannel;
 import org.springframework.integration.handler.ServiceActivatingHandler;
 import org.springframework.integration.ip.IpHeaders;
 import org.springframework.integration.ip.util.SocketTestUtils;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.SocketUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.SubscribableChannel;
 
 /**
  *
@@ -65,9 +68,12 @@ public class UdpChannelAdapterTests {
 		DatagramPacketMessageMapper mapper = new DatagramPacketMessageMapper();
 		DatagramPacket packet = mapper.fromMessage(message);
 		packet.setSocketAddress(new InetSocketAddress("localhost", port));
-		new DatagramSocket(SocketUtils.findAvailableUdpSocket()).send(packet);
+		DatagramSocket datagramSocket = new DatagramSocket(SocketUtils.findAvailableUdpSocket());
+		datagramSocket.send(packet);
+		datagramSocket.close();
 		Message<byte[]> receivedMessage = (Message<byte[]>) channel.receive(2000);
 		assertEquals(new String(message.getPayload()), new String(receivedMessage.getPayload()));
+		adapter.stop();
 	}
 
 	@SuppressWarnings("unchecked")
@@ -91,6 +97,7 @@ public class UdpChannelAdapterTests {
 		final CountDownLatch replyReceivedLatch = new CountDownLatch(1);
 		//main thread sends the reply using the headers, this thread will receive it
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
+			@Override
 			public void run() {
 				DatagramPacket answer = new DatagramPacket(new byte[2000], 2000);
 				try {
@@ -112,11 +119,15 @@ public class UdpChannelAdapterTests {
 				(String) receivedMessage.getHeaders().get(IpHeaders.IP_ADDRESS),
 				(Integer) receivedMessage.getHeaders().get(IpHeaders.PORT)));
 		assertTrue(receiverReadyLatch.await(10, TimeUnit.SECONDS));
-		new DatagramSocket().send(reply);
+		DatagramSocket datagramSocket = new DatagramSocket();
+		datagramSocket.send(reply);
 		assertTrue(replyReceivedLatch.await(10, TimeUnit.SECONDS));
 		DatagramPacket answerPacket = theAnswer.get();
 		assertNotNull(answerPacket);
 		assertEquals(replyString, new String(answerPacket.getData(), 0, answerPacket.getLength()));
+		datagramSocket.close();
+		socket.close();
+		adapter.stop();
 	}
 
 	@SuppressWarnings("unchecked")
@@ -138,11 +149,15 @@ public class UdpChannelAdapterTests {
 //				whichNic,
 				SocketUtils.findAvailableUdpSocket(), 5000);
 //		handler.setLocalAddress(whichNic);
+		handler.setBeanFactory(mock(BeanFactory.class));
 		handler.afterPropertiesSet();
+		handler.start();
 		Message<byte[]> message = MessageBuilder.withPayload("ABCD".getBytes()).build();
 		handler.handleMessage(message);
 		Message<byte[]> receivedMessage = (Message<byte[]>) channel.receive(2000);
 		assertEquals(new String(message.getPayload()), new String(receivedMessage.getPayload()));
+		adapter.stop();
+		handler.stop();
 	}
 
 	@SuppressWarnings("unchecked")
@@ -165,11 +180,14 @@ public class UdpChannelAdapterTests {
 		DatagramPacketMessageMapper mapper = new DatagramPacketMessageMapper();
 		DatagramPacket packet = mapper.fromMessage(message);
 		packet.setSocketAddress(new InetSocketAddress("225.6.7.8", port));
-		new DatagramSocket(0, Inet4Address.getByName(nic)).send(packet);
+		DatagramSocket datagramSocket = new DatagramSocket(0, Inet4Address.getByName(nic));
+		datagramSocket.send(packet);
+		datagramSocket.close();
 
 		Message<byte[]> receivedMessage = (Message<byte[]>) channel.receive(2000);
 		assertNotNull(receivedMessage);
 		assertEquals(new String(message.getPayload()), new String(receivedMessage.getPayload()));
+		adapter.stop();
 	}
 
 	@SuppressWarnings("unchecked")
@@ -196,6 +214,7 @@ public class UdpChannelAdapterTests {
 		Message<byte[]> receivedMessage = (Message<byte[]>) channel.receive(2000);
 		assertNotNull(receivedMessage);
 		assertEquals(new String(message.getPayload()), new String(receivedMessage.getPayload()));
+		adapter.stop();
 	}
 
 	@Test
@@ -217,10 +236,13 @@ public class UdpChannelAdapterTests {
 		DatagramPacketMessageMapper mapper = new DatagramPacketMessageMapper();
 		DatagramPacket packet = mapper.fromMessage(message);
 		packet.setSocketAddress(new InetSocketAddress("localhost", port));
-		new DatagramSocket(SocketUtils.findAvailableUdpSocket()).send(packet);
+		DatagramSocket datagramSocket = new DatagramSocket(SocketUtils.findAvailableUdpSocket());
+		datagramSocket.send(packet);
+		datagramSocket.close();
 		Message<?> receivedMessage = errorChannel.receive(2000);
 		assertNotNull(receivedMessage);
 		assertEquals("Failed", ((Exception) receivedMessage.getPayload()).getCause().getMessage());
+		adapter.stop();
 	}
 
 	private class FailingService {

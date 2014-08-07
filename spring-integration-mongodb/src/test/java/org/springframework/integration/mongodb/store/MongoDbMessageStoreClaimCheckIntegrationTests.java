@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,22 +16,21 @@
 
 package org.springframework.integration.mongodb.store;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 import java.io.Serializable;
 
+import com.mongodb.MongoClient;
 import org.junit.Test;
 
 import org.springframework.data.mongodb.MongoDbFactory;
 import org.springframework.data.mongodb.core.SimpleMongoDbFactory;
-import org.springframework.integration.Message;
 import org.springframework.integration.mongodb.rules.MongoDbAvailable;
 import org.springframework.integration.mongodb.rules.MongoDbAvailableTests;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.transformer.ClaimCheckInTransformer;
 import org.springframework.integration.transformer.ClaimCheckOutTransformer;
-
-import com.mongodb.Mongo;
+import org.springframework.messaging.Message;
 
 /**
  * @author Mark Fisher
@@ -42,8 +41,9 @@ public class MongoDbMessageStoreClaimCheckIntegrationTests extends MongoDbAvaila
 	@Test
 	@MongoDbAvailable
 	public void stringPayload() throws Exception {
-		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new Mongo(), "test");
+		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new MongoClient(), "test");
 		MongoDbMessageStore messageStore = new MongoDbMessageStore(mongoDbFactory);
+		messageStore.afterPropertiesSet();
 		ClaimCheckInTransformer checkin = new ClaimCheckInTransformer(messageStore);
 		ClaimCheckOutTransformer checkout = new ClaimCheckOutTransformer(messageStore);
 		Message<?> originalMessage = MessageBuilder.withPayload("test1").build();
@@ -58,8 +58,9 @@ public class MongoDbMessageStoreClaimCheckIntegrationTests extends MongoDbAvaila
 	@Test
 	@MongoDbAvailable
 	public void objectPayload() throws Exception {
-		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new Mongo(), "test");
+		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new MongoClient(), "test");
 		MongoDbMessageStore messageStore = new MongoDbMessageStore(mongoDbFactory);
+		messageStore.afterPropertiesSet();
 		ClaimCheckInTransformer checkin = new ClaimCheckInTransformer(messageStore);
 		ClaimCheckOutTransformer checkout = new ClaimCheckOutTransformer(messageStore);
 		Beverage payload = new Beverage();
@@ -78,7 +79,7 @@ public class MongoDbMessageStoreClaimCheckIntegrationTests extends MongoDbAvaila
 	@Test
 	@MongoDbAvailable
 	public void stringPayloadConfigurable() throws Exception {
-		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new Mongo(), "test");
+		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new MongoClient(), "test");
 		ConfigurableMongoDbMessageStore messageStore = new ConfigurableMongoDbMessageStore(mongoDbFactory);
 		messageStore.afterPropertiesSet();
 		ClaimCheckInTransformer checkin = new ClaimCheckInTransformer(messageStore);
@@ -95,7 +96,7 @@ public class MongoDbMessageStoreClaimCheckIntegrationTests extends MongoDbAvaila
 	@Test
 	@MongoDbAvailable
 	public void objectPayloadConfigurable() throws Exception {
-		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new Mongo(), "test");
+		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new MongoClient(), "test");
 		ConfigurableMongoDbMessageStore messageStore = new ConfigurableMongoDbMessageStore(mongoDbFactory);
 		messageStore.afterPropertiesSet();
 		ClaimCheckInTransformer checkin = new ClaimCheckInTransformer(messageStore);

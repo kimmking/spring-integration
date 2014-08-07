@@ -384,16 +384,13 @@ rt.setConnectionFactory(redisConnectionFactory);]]></programlisting>
 	<para>
     As described in EIP, a <ulink url="http://www.eaipatterns.com/MessageStore.html">Message Store</ulink> allows you to persist Messages.
     This can be very useful when dealing with components that have a capability to buffer messages
-    (<emphasis>QueueChannel, Aggregator, Resequencer</emphasis>, etc.) if reliability is a concern.
+    (<emphasis>Aggregator, Resequencer</emphasis>, etc.) if reliability is a concern.
     In Spring Integration, the MessageStore strategy also provides the foundation for the
 	<ulink url="http://www.eaipatterns.com/StoreInLibrary.html">ClaimCheck</ulink> pattern, which is described in EIP as well.
 	</para>
 
 	<para>
-    Spring Integration's Redis module provides the <classname>RedisMessageStore</classname> which is an implementation of both the
-    the <classname>MessageStore</classname> strategy (mainly used by the <emphasis>QueueChannel</emphasis> and <emphasis>ClaimCheck</emphasis>
-    patterns) and the <classname>MessageGroupStore</classname> strategy (mainly used by the <emphasis>Aggregator</emphasis> and
-    <emphasis>Resequencer</emphasis> patterns).
+    Spring Integration's Redis module provides the <classname>RedisMessageStore</classname>.
     </para>
 
 	<para>
@@ -401,17 +398,13 @@ rt.setConnectionFactory(redisConnectionFactory);]]></programlisting>
     <constructor-arg ref="redisConnectionFactory"/>
 </bean>
 
-<int:channel id="somePersistentQueueChannel">
-    <int:queue message-store="redisMessageStore"/>
-<int:channel>
-
 <int:aggregator input-channel="inputChannel" output-channel="outputChannel"
          message-store="redisMessageStore"/>]]></programlisting>
     </para>
 
     <para>
-    Above is a sample <classname>RedisMessageStore</classname> configuration that shows its usage by a <emphasis>QueueChannel</emphasis>
-    and an <emphasis>Aggregator</emphasis>. As you can see it is a simple bean configuration, and it expects a
+    Above is a sample <classname>RedisMessageStore</classname> configuration that shows its usage by
+    an <emphasis>Aggregator</emphasis>. As you can see it is a simple bean configuration, and it expects a
     <classname>RedisConnectionFactory</classname> as a constructor argument.
     </para>
 
@@ -419,20 +412,62 @@ rt.setConnectionFactory(redisConnectionFactory);]]></programlisting>
     However if you want to use a different serialization technique (e.g., JSON), you can provide your own serializer via
     the <code>valueSerializer</code> property of the <classname>RedisMessageStore</classname>.
     </para>
+	<section id="redis-cms">
+		<title>Redis Channel Message Stores</title>
+		<para>
+			The <classname>RedisMessageStore</classname> above maintains each group as a value under a single key
+			(the group id). While this can be used to back a <classname>QueueChannel</classname> for persistence,
+			a specialized <classname>RedisChannelMessageStore</classname> is provided for that purpose (since
+			<emphasis>version 4.0</emphasis>). This store uses a <code>LIST</code> for each channel and
+			<code>LPUSH</code> when sending and <code>RPOP</code> when receiving messages. This store also
+			uses JDK serialization by default, but the value serializer can be modified as described above.
+		</para>
+		<para>
+			It is recommended that this store is used for backing channels, instead of the general
+			<classname>RedisMessageStore</classname>.
+		</para>
+		<programlisting language="xml"><![CDATA[<bean id="redisMessageStore" class="o.s.i.redis.store.RedisChannelMessageStore">
+	<constructor-arg ref="redisConnectionFactory"/>
+</bean>
+
+<int:channel id="somePersistentQueueChannel">
+	<int:queue message-store="redisMessageStore"/>
+<int:channel>]]></programlisting>
+		<para>
+			The keys that are used to store the data have the form <code>&lt;storeBeanName&gt;:&lt;channelId&gt;</code>
+			(in the above example, <code>redisMessageStore:somePersistentQueueChannel</code>).
+		</para>
+		<para>
+			In addition, a subclass <classname>RedisChannelPriorityMessageStore</classname> is also provided.
+			When this is used with a <classname>QueueChannel</classname>, the messages are received in
+			(FIFO within) priority order. It uses the standard <classname
+			>IntegrationMessageHeaderAccessor.PRIORITY</classname> header and supports priority values
+			<code>0 - 9</code>; messages with other priorities (and messages with no priority) are retrieved
+			in FIFO order after any messages with priority.
+		</para>
+		<important>
+			These stores implement only <interfacename>BasicMessageGroupStore</interfacename> and
+			do not implement <interfacename>MessageGroupStore</interfacename>; they
+			can only be used for situations such as backing a <classname>QueueChannel</classname>.
+		</important>
+	</section>
   </section>
 	<section id="redis-metadata-store">
 		<title>Redis Metadata Store</title>
 		<para>
 			As of <emphasis>Spring Integration 3.0</emphasis> a new Redis-based
-			<interfacename><ulink url="http://docs.spring.io/spring-integration/docs/latest-ga/api/org/springframework/integration/store/MetadataStore.html">MetadataStore</ulink></interfacename>
-			implementation is available. The <classname>RedisMetadataStore</classname> can
+			<interfacename><ulink url="http://docs.spring.io/spring-integration/docs/latest-ga/api/org/springframework/integration/metadata/MetadataStore.html">MetadataStore</ulink></interfacename>
+			(<xref linkend="metadata-store"/>) implementation is available. The <classname>RedisMetadataStore</classname> can
 			be used to maintain state of a <interfacename>MetadataStore</interfacename>
 			across application restarts. This new <interfacename>MetadataStore</interfacename>
 			implementation can be used with adapters such as:
 		</para>
 		<itemizedlist>
-			<listitem>Twitter Inbound Adapters</listitem>
-			<listitem>Feed Inbound Channel Adapter</listitem>
+			<listitem><xref linkend="twitter-inbound"/></listitem>
+			<listitem><xref linkend="feed-inbound-channel-adapter"/></listitem>
+			<listitem><xref linkend="file-reading"/></listitem>
+			<listitem><xref linkend="ftp-inbound"/></listitem>
+			<listitem><xref linkend="sftp-inbound"/></listitem>
 		</itemizedlist>
 		<para>
 			In order to instruct these adapters to use the new <classname>RedisMetadataStore</classname>
@@ -444,11 +479,21 @@ rt.setConnectionFactory(redisConnectionFactory);]]></programlisting>
 		<programlisting language="xml"><![CDATA[<bean name="metadataStore" class="o.s.i.redis.store.metadata.RedisMetadataStore">
     <constructor-arg name="connectionFactory" ref="redisConnectionFactory"/>
 </bean>]]></programlisting>
-		<warning>
-			Be careful when using the same Redis instancce across multiple application
-			contexts as separate adapters may accidentally use the same persisted
-			key.
-		</warning>
+		<para>
+			The <classname>RedisMetadataStore</classname> is backed by
+			<ulink url="http://docs.spring.io/spring-data/data-redis/docs/current/api/org/springframework/data/redis/support/collections/RedisProperties.html"
+			><classname>RedisProperties</classname></ulink> and interaction with it uses
+			<ulink url="http://docs.spring.io/spring-data/data-redis/docs/current/api/org/springframework/data/redis/core/BoundHashOperations.html"
+			><classname>BoundHashOperations</classname></ulink>, which, in turn, requires a <code>key</code> for the entire
+			<classname>Properties</classname> store. In the case of the <interfacename>MetadataStore</interfacename>, this
+			<code>key</code> plays the role of a <emphasis>region</emphasis>, which is useful in distributed environment,
+			when several applications use the same Redis server. By default this <code>key</code> has the value <code>MetaData</code>.
+		</para>
+		<para>
+			Starting with <emphasis>version 4.0</emphasis>, this store now implements <interfacename
+			>ConcurrentMetadataStore</interfacename>, allowing it to be reliably shared across multiple
+			application instances where only one instance will be allowed to store or modify a key's value.
+		</para>
 	</section>
   <section id="redis-store-inbound-channel-adapter">
         <title>RedisStore Inbound Channel Adapter</title>
@@ -620,4 +665,144 @@ the serialization of values, you may want to consider providing your own
     </para>
   </section>
 
+	<section id="redis-outbound-gateway">
+	<title>Redis Outbound Command Gateway</title>
+		<para>
+			Since <emphasis>Spring Integration 4.0</emphasis>, the Redis Command Gateway is available to
+			perform any standard Redis command using generic
+			<code>RedisConnection#execute</code>
+			method:
+			<programlisting language="xml"><![CDATA[<int-redis:outbound-gateway
+		request-channel="" ]]><co id="redis-o-g-request-channel"/><![CDATA[
+		reply-channel="" ]]><co id="redis-o-g-reply-channel"/><![CDATA[
+		requires-reply="" ]]><co id="redis-o-g-requires-reply"/><![CDATA[
+		reply-timeout="" ]]><co id="redis-o-g-reply-timeout"/><![CDATA[
+		connection-factory="" ]]><co id="redis-o-g-connectionFactory"/><![CDATA[
+		redis-template="" ]]><co id="redis-o-g-template"/><![CDATA[
+		arguments-serializer="" ]]><co id="redis-o-g-arguments-serializer"/><![CDATA[
+		command-expression="" ]]><co id="redis-o-g-command-expression"/><![CDATA[
+		argument-expressions="" ]]><co id="redis-o-g-argument-expressions"/><![CDATA[
+		use-command-variable="" ]]><co id="redis-o-g-use-command-variable"/><![CDATA[
+		arguments-strategy="" />]]><co id="redis-o-g-arguments-strategy"/>
+			</programlisting>
+			<calloutlist>
+				<callout arearefs="redis-o-g-request-channel">
+					<para>
+						The <interfacename>MessageChannel</interfacename> from which this Endpoint receives<interfacename>Message</interfacename>s.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-reply-channel">
+					<para>
+						The <interfacename>MessageChannel</interfacename> where this Endpoint sends reply<interfacename>Message</interfacename>s.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-requires-reply">
+					<para>
+						Specify whether this outbound gateway must return a non-null value. This value is
+						<code>false</code> by default, otherwise a ReplyRequiredException will be thrown when
+						the Redis returns a <code>null</code> value.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-reply-timeout">
+					<para>
+						The timeout in milliseconds to wait until the reply message will be sent or not. Typically is
+						applied for queue-based limited reply-channels.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-connectionFactory">
+					<para>
+						A reference to a <interfacename>RedisConnectionFactory</interfacename>bean.
+						Defaults to <code>redisConnectionFactory</code>. Mutually exclusive with 'redis-template' attribute.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-template">
+					<para>
+						A reference to a <classname>RedisTemplate</classname> bean.
+						Mutually exclusive with 'connection-factory' attribute.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-arguments-serializer">
+					<para>
+						Reference to an instance of<interfacename>org.springframework.data.redis.serializer.RedisSerializer</interfacename>.
+						Used to serialize each command argument to byte[] if necessary.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-command-expression">
+					<para>
+						The SpEL expression that returns the command key. Default is the <code>redis_command</code> message header.
+						Must not evaluate to <code>null</code>.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-argument-expressions">
+					<para>
+						Comma-separate SpEL expressions that will be evaluated as command arguments.
+						Mutually exclusive with the <code>arguments-strategy</code> attribute. If neither of them is provided
+						the <code>payload</code> is used as the command argument(s).
+						Argument expressions may evaluate to 'null', to support a variable number of arguments.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-use-command-variable">
+					<para>
+						A <code>boolean</code> flag to specify if the evaluated Redis command string will be
+						made available as the <code>#cmd</code> variable
+						in the expression evaluation context in the
+						<classname>org.springframework.integration.redis.outbound.ExpressionArgumentsStrategy</classname>
+						when <code>argument-expressions</code> is configured, otherwise this attribute is ignored.
+					</para>
+				</callout>
+				<callout arearefs="redis-o-g-arguments-strategy">
+					<para>
+						Reference to an instance of <interfacename>org.springframework.integration.redis.outbound.ArgumentsStrategy</interfacename>.
+						Mutually exclusive with <code>argument-expressions</code> attribute. If neither of them is provided
+						the <code>payload</code> is used as the command argument(s).
+					</para>
+				</callout>
+			</calloutlist>
+		</para>
+		<para>
+		   The <code>&lt;int-redis:outbound-gateway&gt;</code> can be used as a common component to perform any desired
+		   Redis operation. For example to get incremented value from Redis Atomic Number:
+			<programlisting language="xml"><![CDATA[<int-redis:outbound-gateway request-channel="requestChannel"
+	reply-channel="replyChannel"
+	command-expression="'INCR'"/>]]></programlisting>
+			where the Message <code>payload</code> should be a name of <code>redisCounter</code>, which may be provided
+			by <classname>org.springframework.data.redis.support.atomic.RedisAtomicInteger</classname> bean definition.
+		</para>
+		<para>
+		  The <code>RedisConnection#execute</code> has a generic <classname>Object</classname> as return type and real
+		  result depends on command type, for example <code>MGET</code> returns a <code>List&lt;byte[]&gt;</code>.
+			For more information about commands, their arguments and result type see
+		  <ulink url="http://redis.io/commands">Redis Specification</ulink>.
+		</para>
+	</section>
+	<section id="redis-lock-registry">
+		<title>Redis Lock Registry</title>
+		<para>
+			Starting with <emphasis>version 4.0</emphasis>, the <classname>RedisLockRegistry</classname> is
+			available. Certain components (for example aggregator and resequencer) use a lock obtained from
+			a <interfacename>LockRegistry</interfacename> instance to ensure
+			that only one thread is manipulating a group at a time. The <classname>DefaultLockRegistry</classname>
+			performs this function within a single component; you can now configure an external lock registry
+			on these components. When used with a shared <interfacename>MessageGroupStore</interfacename>,
+			the <classname>RedisLockRegistry</classname> can be use to provide this functionality across
+			multiple application instances, such that only one instance can manipulate the group at a time.
+		</para>
+		<para>
+			When a lock is released by a local thread, another local thread will generally be able to acquire the
+			lock immediately. If a lock is released by a thread using a different registry instance, it can take up to
+			100ms to acquire the lock.
+		</para>
+		<para>
+			To avoid "hung" locks (when a server fails), the locks in this registry are expired after a default
+			60 seconds, but this can be configured on the registry. Locks are normally held for a much smaller
+			time.
+		</para>
+		<important>
+			Because the keys can expire, an attempt to unlock an expired lock will result in an exception
+			being thrown. However, be aware that the resources protected by such a lock may have been
+			compromised so such exceptions should be considered severe. The expiry should be set at
+			a large enough value to prevent this condition, while small enough that the lock can
+			be recovered after a server failure in a reasonable amount of time.
+		</important>
+	</section>
 </chapter>

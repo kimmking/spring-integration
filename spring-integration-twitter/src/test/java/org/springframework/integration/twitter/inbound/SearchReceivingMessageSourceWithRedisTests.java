@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2013-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,19 +36,19 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportResource;
-import org.springframework.integration.core.PollableChannel;
 import org.springframework.integration.endpoint.SourcePollingChannelAdapter;
 import org.springframework.integration.metadata.MetadataStore;
 import org.springframework.integration.redis.metadata.RedisMetadataStore;
 import org.springframework.integration.redis.rules.RedisAvailable;
 import org.springframework.integration.redis.rules.RedisAvailableTests;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.PollableChannel;
 import org.springframework.social.twitter.api.SearchMetadata;
 import org.springframework.social.twitter.api.SearchOperations;
 import org.springframework.social.twitter.api.SearchResults;
 import org.springframework.social.twitter.api.Tweet;
 import org.springframework.social.twitter.api.UserOperations;
-import org.springframework.social.twitter.api.impl.SearchParameters;
+import org.springframework.social.twitter.api.SearchParameters;
 import org.springframework.social.twitter.api.impl.TwitterTemplate;
 
 /**

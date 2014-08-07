@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,17 +41,19 @@ import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.mockito.stubbing.Answer;
+
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
 import org.springframework.integration.MessageRejectedException;
-import org.springframework.integration.core.MessageHandler;
 import org.springframework.integration.dispatcher.RoundRobinLoadBalancingStrategy;
 import org.springframework.integration.dispatcher.UnicastingDispatcher;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Oleg Zhurakousky
+ * @author Gary Russell
  */
 @RunWith(MockitoJUnitRunner.class)
 public class MixedDispatcherConfigurationScenarioTests {
@@ -78,7 +80,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 	@Mock
 	private MessageHandler handlerC;
 
-	private Message<?> message = new GenericMessage<String>("test");
+	private final Message<?> message = new GenericMessage<String>("test");
 
 
 	@SuppressWarnings("unchecked")
@@ -88,7 +90,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 		Mockito.reset(handlerA);
 		Mockito.reset(handlerB);
 		Mockito.reset(handlerC);
-		
+
 		ac = new ClassPathXmlApplicationContext("MixedDispatcherConfigurationScenarioTests-context.xml",
                 MixedDispatcherConfigurationScenarioTests.class);
 		executor = ac.getBean("taskExecutor", ExecutorService.class);
@@ -100,7 +102,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 	@Test
 	public void noFailoverNoLoadBalancing() {
 		DirectChannel channel = (DirectChannel) ac.getBean("noLoadBalancerNoFailover");
-		doThrow(new MessageRejectedException(message)).when(handlerA).handleMessage(message);
+		doThrow(new MessageRejectedException(message, null)).when(handlerA).handleMessage(message);
 		UnicastingDispatcher dispatcher = channel.getDispatcher();
 		dispatcher.addHandler(handlerA);
 		dispatcher.addHandler(handlerB);
@@ -116,15 +118,16 @@ public class MixedDispatcherConfigurationScenarioTests {
 		verify(handlerB, times(0)).handleMessage(message);
 	}
 
-	@Test(timeout = 5000)
+	@Test
 	public void noFailoverNoLoadBalancingConcurrent() throws Exception {
 		final DirectChannel channel = (DirectChannel) ac.getBean("noLoadBalancerNoFailover");
-		doThrow(new MessageRejectedException(message)).when(handlerA).handleMessage(message);
+		doThrow(new MessageRejectedException(message, null)).when(handlerA).handleMessage(message);
 		UnicastingDispatcher dispatcher = channel.getDispatcher();
 		dispatcher.addHandler(handlerA);
 		dispatcher.addHandler(handlerB);
 
 		Runnable messageSenderTask = new Runnable() {
+			@Override
 			public void run() {
 				try {
 					start.await();
@@ -147,18 +150,18 @@ public class MixedDispatcherConfigurationScenarioTests {
 			executor.execute(messageSenderTask);
 		}
 		start.countDown();
-		allDone.await();
-		
+		assertTrue(allDone.await(5, TimeUnit.SECONDS));
+
 		executor.shutdown();
 		executor.awaitTermination(5, TimeUnit.SECONDS);
-		
+
 		assertTrue("not all messages were accepted", failed.get());
 		verify(handlerA, times(TOTAL_EXECUTIONS)).handleMessage(message);
 		verify(handlerB, times(0)).handleMessage(message);
 		verify(exceptionRegistry, times(TOTAL_EXECUTIONS)).add((Exception) anyObject());
 	}
 
-	@Test(timeout = 5000)
+	@Test
 	public void noFailoverNoLoadBalancingWithExecutorConcurrent()
 			throws Exception {
 		final ExecutorChannel channel = (ExecutorChannel) ac.getBean("noLoadBalancerNoFailoverExecutor");
@@ -167,7 +170,8 @@ public class MixedDispatcherConfigurationScenarioTests {
 		dispatcher.addHandler(handlerB);
 
 		doAnswer(new Answer<Object>() {
-			public Object answer(InvocationOnMock invocation) {			
+			@Override
+			public Object answer(InvocationOnMock invocation) {
 				RuntimeException e = new RuntimeException();
 				allDone.countDown();
 				failed.set(true);
@@ -175,15 +179,17 @@ public class MixedDispatcherConfigurationScenarioTests {
 				throw e;
 			}
 		}).when(handlerA).handleMessage(message);
-		
+
 		doAnswer(new Answer<Object>() {
-			public Object answer(InvocationOnMock invocation) {			
+			@Override
+			public Object answer(InvocationOnMock invocation) {
 				allDone.countDown();
 				return null;
 			}
 		}).when(handlerB).handleMessage(message);
-		
+
 		Runnable messageSenderTask = new Runnable() {
+			@Override
 			public void run() {
 				try {
 					start.await();
@@ -197,11 +203,11 @@ public class MixedDispatcherConfigurationScenarioTests {
 			executor.execute(messageSenderTask);
 		}
 		start.countDown();
-		allDone.await();
+		assertTrue(allDone.await(5, TimeUnit.SECONDS));
 
 		executor.shutdown();
 		executor.awaitTermination(5, TimeUnit.SECONDS);
-		
+
 		assertTrue("not all messages were accepted", failed.get());
 		verify(handlerA, times(TOTAL_EXECUTIONS)).handleMessage(message);
 		verify(handlerB, times(0)).handleMessage(message);
@@ -211,7 +217,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 	@Test
 	public void noFailoverLoadBalancing() {
 		DirectChannel channel = (DirectChannel) ac.getBean("loadBalancerNoFailover");
-		doThrow(new MessageRejectedException(message)).when(handlerA).handleMessage(message);
+		doThrow(new MessageRejectedException(message, null)).when(handlerA).handleMessage(message);
 		UnicastingDispatcher dispatcher = channel.getDispatcher();
 		dispatcher.setLoadBalancingStrategy(new RoundRobinLoadBalancingStrategy());
 		dispatcher.addHandler(handlerA);
@@ -239,10 +245,10 @@ public class MixedDispatcherConfigurationScenarioTests {
 		verify(handlerC, times(1)).handleMessage(message);
 	}
 
-	@Test(timeout = 5000)
+	@Test
 	public void noFailoverLoadBalancingConcurrent() throws Exception {
 		final DirectChannel channel = (DirectChannel) ac.getBean("loadBalancerNoFailover");
-		doThrow(new MessageRejectedException(message)).when(handlerA).handleMessage(message);
+		doThrow(new MessageRejectedException(message, null)).when(handlerA).handleMessage(message);
 		UnicastingDispatcher dispatcher = channel.getDispatcher();
 		dispatcher.addHandler(handlerA);
 		dispatcher.addHandler(handlerB);
@@ -253,6 +259,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 		final Message<?> message = this.message;
 		final AtomicBoolean failed = new AtomicBoolean(false);
 		Runnable messageSenderTask = new Runnable() {
+			@Override
 			public void run() {
 				try {
 					start.await();
@@ -275,11 +282,11 @@ public class MixedDispatcherConfigurationScenarioTests {
 			executor.execute(messageSenderTask);
 		}
 		start.countDown();
-		allDone.await();
-		
+		assertTrue(allDone.await(5, TimeUnit.SECONDS));
+
 		executor.shutdown();
 		executor.awaitTermination(5, TimeUnit.SECONDS);
-		
+
 		assertTrue("not all messages were accepted", failed.get());
 		verify(handlerA, times(14)).handleMessage(message);
 		verify(handlerB, times(13)).handleMessage(message);
@@ -287,7 +294,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 		verify(exceptionRegistry, times(14)).add((Exception) anyObject());
 	}
 
-	@Test(timeout = 5000)
+	@Test
 	public void noFailoverLoadBalancingWithExecutorConcurrent() throws Exception {
 		final ExecutorChannel channel = (ExecutorChannel) ac.getBean("loadBalancerNoFailoverExecutor");
 		UnicastingDispatcher dispatcher = channel.getDispatcher();
@@ -300,7 +307,8 @@ public class MixedDispatcherConfigurationScenarioTests {
 		final Message<?> message = this.message;
 		final AtomicBoolean failed = new AtomicBoolean(false);
 		doAnswer(new Answer<Object>() {
-			public Object answer(InvocationOnMock invocation) {		
+			@Override
+			public Object answer(InvocationOnMock invocation) {
 				failed.set(true);
 				RuntimeException e = new RuntimeException();
 				exceptionRegistry.add(e);
@@ -309,12 +317,14 @@ public class MixedDispatcherConfigurationScenarioTests {
 			}
 		}).when(handlerA).handleMessage(message);
 		doAnswer(new Answer<Object>() {
+			@Override
 			public Object answer(InvocationOnMock invocation) {
 				allDone.countDown();
 				return null;
 			}
 		}).when(handlerB).handleMessage(message);
 		doAnswer(new Answer<Object>() {
+			@Override
 			public Object answer(InvocationOnMock invocation) {
 				allDone.countDown();
 				return null;
@@ -322,6 +332,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 		}).when(handlerC).handleMessage(message);
 
 		Runnable messageSenderTask = new Runnable() {
+			@Override
 			public void run() {
 				try {
 					start.await();
@@ -335,11 +346,11 @@ public class MixedDispatcherConfigurationScenarioTests {
 			executor.execute(messageSenderTask);
 		}
 		start.countDown();
-		allDone.await();
+		assertTrue(allDone.await(5, TimeUnit.SECONDS));
 
 		executor.shutdown();
 		executor.awaitTermination(5, TimeUnit.SECONDS);
-		
+
 		assertTrue("not all messages were accepted", failed.get());
 		verify(handlerA, times(14)).handleMessage(message);
 		verify(handlerB, times(13)).handleMessage(message);
@@ -351,7 +362,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 	public void failoverNoLoadBalancing() {
 		DirectChannel channel = (DirectChannel) ac
 				.getBean("noLoadBalancerFailover");
-		doThrow(new MessageRejectedException(message)).when(handlerA)
+		doThrow(new MessageRejectedException(message, null)).when(handlerA)
 				.handleMessage(message);
 		UnicastingDispatcher dispatcher = channel.getDispatcher();
 		dispatcher.addHandler(handlerA);
@@ -376,12 +387,12 @@ public class MixedDispatcherConfigurationScenarioTests {
 		verify(handlerB, times(2)).handleMessage(message);
 	}
 
-	@Test(timeout = 5000)
+	@Test
 	public void failoverNoLoadBalancingConcurrent()
 			throws Exception {
 		final DirectChannel channel = (DirectChannel) ac
 				.getBean("noLoadBalancerFailover");
-		doThrow(new MessageRejectedException(message)).when(handlerA).handleMessage(message);
+		doThrow(new MessageRejectedException(message, null)).when(handlerA).handleMessage(message);
 		UnicastingDispatcher dispatcher = channel.getDispatcher();
 		dispatcher.addHandler(handlerA);
 		dispatcher.addHandler(handlerB);
@@ -392,6 +403,7 @@ public class MixedDispatcherConfigurationScenarioTests {
 		final Message<?> message = this.message;
 		final AtomicBoolean failed = new AtomicBoolean(false);
 		Runnable messageSenderTask = new Runnable() {
+			@Override
 			public void run() {
 				try {
 					start.await();
@@ -414,46 +426,50 @@ public class MixedDispatcherConfigurationScenarioTests {
 			executor.execute(messageSenderTask);
 		}
 		start.countDown();
-		allDone.await();
-		
+		assertTrue(allDone.await(5, TimeUnit.SECONDS));
+
 		executor.shutdown();
 		executor.awaitTermination(5, TimeUnit.SECONDS);
-		
+
 		assertFalse("not all messages were accepted", failed.get());
 		verify(handlerA, times(TOTAL_EXECUTIONS)).handleMessage(message);
 		verify(handlerB, times(TOTAL_EXECUTIONS)).handleMessage(message);
 		verify(handlerC, never()).handleMessage(message);
 		verify(exceptionRegistry, never()).add((Exception) anyObject());
 	}
-	
-	@Test(timeout = 5000) 
+
+	@Test
 	public void failoverNoLoadBalancingWithExecutorConcurrent() throws Exception {
 		final ExecutorChannel channel = (ExecutorChannel) ac.getBean("noLoadBalancerFailoverExecutor");
-		final UnicastingDispatcher dispatcher = channel.getDispatcher();	
+		final UnicastingDispatcher dispatcher = channel.getDispatcher();
 		dispatcher.addHandler(handlerA);
-		dispatcher.addHandler(handlerB);	
+		dispatcher.addHandler(handlerB);
 		dispatcher.addHandler(handlerC);
-		
+
 		doAnswer(new Answer<Object>() {
-			public Object answer(InvocationOnMock invocation) {			
-				RuntimeException e = new RuntimeException();		
+			@Override
+			public Object answer(InvocationOnMock invocation) {
+				RuntimeException e = new RuntimeException();
 				failed.set(true);
 				throw e;
 			}
 		}).when(handlerA).handleMessage(message);
 		doAnswer(new Answer<Object>() {
-			public Object answer(InvocationOnMock invocation) {		
+			@Override
+			public Object answer(InvocationOnMock invocation) {
 				allDone.countDown();
 				return null;
 			}
 		}).when(handlerB).handleMessage(message);
 		doAnswer(new Answer<Object>() {
-			public Object answer(InvocationOnMock invocation) {		
+			@Override
+			public Object answer(InvocationOnMock invocation) {
 				return null;
 			}
 		}).when(handlerC).handleMessage(message);
-		
+
 		Runnable messageSenderTask = new Runnable() {
+			@Override
 			public void run() {
 				try {
 					start.await();
@@ -465,16 +481,17 @@ public class MixedDispatcherConfigurationScenarioTests {
 		};
 		for (int i = 0; i < TOTAL_EXECUTIONS; i++) {
 			executor.execute(messageSenderTask);
-			
+
 		}
-		start.countDown();	
-		allDone.await();
-		
+		start.countDown();
+		assertTrue(allDone.await(5, TimeUnit.SECONDS));
+
 		executor.shutdown();
 		executor.awaitTermination(5, TimeUnit.SECONDS);
-		
+
 		verify(handlerA, times(TOTAL_EXECUTIONS)).handleMessage(message);
 		verify(handlerB, times(TOTAL_EXECUTIONS)).handleMessage(message);
 		verify(handlerC, never()).handleMessage(message);
 	}
+
 }

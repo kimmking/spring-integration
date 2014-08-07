@@ -37,7 +37,7 @@ import org.springframework.integration.gateway.RequestReplyExchanger;
 import org.springframework.integration.jms.ActiveMQMultiContextTests;
 import org.springframework.integration.jms.JmsOutboundGateway;
 import org.springframework.integration.jms.config.ActiveMqTestUtils;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.test.support.LongRunningIntegrationTest;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.jms.connection.CachingConnectionFactory;
@@ -121,7 +121,7 @@ public class RequestReplyScenariosWithCachedConsumersTests extends ActiveMQMulti
 					});
 				}
 			}).start();
-			org.springframework.integration.Message<?> siReplyMessage = gateway.exchange(new GenericMessage<String>("foo"));
+			org.springframework.messaging.Message<?> siReplyMessage = gateway.exchange(new GenericMessage<String>("foo"));
 			assertEquals("bar", siReplyMessage.getPayload());
 		}
 		finally {
@@ -156,7 +156,7 @@ public class RequestReplyScenariosWithCachedConsumersTests extends ActiveMQMulti
 					});
 				}
 			}).start();
-			org.springframework.integration.Message<?> siReplyMessage = gateway.exchange(new GenericMessage<String>("foo"));
+			org.springframework.messaging.Message<?> siReplyMessage = gateway.exchange(new GenericMessage<String>("foo"));
 			assertEquals("bar", siReplyMessage.getPayload());
 		}
 		finally {
@@ -191,7 +191,7 @@ public class RequestReplyScenariosWithCachedConsumersTests extends ActiveMQMulti
 					});
 				}
 			}).start();
-			org.springframework.integration.Message<?> siReplyMessage = gateway.exchange(new GenericMessage<String>("foo"));
+			org.springframework.messaging.Message<?> siReplyMessage = gateway.exchange(new GenericMessage<String>("foo"));
 			assertEquals("bar", siReplyMessage.getPayload());
 		}
 		finally {

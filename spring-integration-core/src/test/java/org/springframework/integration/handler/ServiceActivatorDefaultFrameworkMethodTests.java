@@ -30,14 +30,14 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.core.MessageHandler;
 import org.springframework.integration.endpoint.EventDrivenConsumer;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.integration.util.StackTraceUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -98,7 +98,7 @@ public class ServiceActivatorDefaultFrameworkMethodTests {
 		assertEquals("TEST", reply.getPayload());
 		assertEquals("replyingHandlerTestInputChannel,replyingHandlerTestService", reply.getHeaders().get("history").toString());
 		StackTraceElement[] st = (StackTraceElement[]) reply.getHeaders().get("callStack");
-		assertTrue(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("Dispatcher", "MethodInvokerHelper", st)); // close to the metal
+		assertTrue(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("AbstractSubscribableChannel", "MethodInvokerHelper", st)); // close to the metal
 	}
 
 	@Test
@@ -111,7 +111,7 @@ public class ServiceActivatorDefaultFrameworkMethodTests {
 		assertEquals("optimizedRefReplyingHandlerTestInputChannel,optimizedRefReplyingHandlerTestService",
 				reply.getHeaders().get("history").toString());
 		StackTraceElement[] st = (StackTraceElement[]) reply.getHeaders().get("callStack");
-		assertTrue(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("Dispatcher", "MethodInvokerHelper", st)); // close to the metal
+		assertTrue(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("AbstractSubscribableChannel", "MethodInvokerHelper", st)); // close to the metal
 	}
 
 	@Test
@@ -123,7 +123,7 @@ public class ServiceActivatorDefaultFrameworkMethodTests {
 		assertEquals("TEST", reply.getPayload());
 		assertEquals("replyingHandlerWithStandardMethodTestInputChannel,replyingHandlerWithStandardMethodTestService", reply.getHeaders().get("history").toString());
 		StackTraceElement[] st = (StackTraceElement[]) reply.getHeaders().get("callStack");
-		assertTrue(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("Dispatcher", "MethodInvokerHelper", st)); // close to the metal
+		assertTrue(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("AbstractSubscribableChannel", "MethodInvokerHelper", st)); // close to the metal
 	}
 
 	@Test
@@ -189,7 +189,7 @@ public class ServiceActivatorDefaultFrameworkMethodTests {
 			Exception e = new RuntimeException();
 			StackTraceElement[] st = e.getStackTrace();
 			// use this to test that StackTraceUtils works as expected and returns false
-			assertFalse(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("Dispatcher", "MethodInvokerHelper", st));
+			assertFalse(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("AbstractSubscribableChannel", "MethodInvokerHelper", st));
 			return "bar";
 		}
 
@@ -202,7 +202,7 @@ public class ServiceActivatorDefaultFrameworkMethodTests {
 		public void handleMessage(Message<?> requestMessage) {
 			Exception e = new RuntimeException();
 			StackTraceElement[] st = e.getStackTrace();
-			assertTrue(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("Dispatcher", "MethodInvokerHelper", st)); // close to the metal
+			assertTrue(StackTraceUtils.isFrameContainingXBeforeFrameContainingY("AbstractSubscribableChannel", "MethodInvokerHelper", st)); // close to the metal
 		}
 	}
 
@@ -215,6 +215,7 @@ public class ServiceActivatorDefaultFrameworkMethodTests {
 			this.prefix = prefix;
 		}
 
+		@Override
 		public String processMessage(Message<?> message) {
 			return prefix + ":" + message.getPayload();
 		}

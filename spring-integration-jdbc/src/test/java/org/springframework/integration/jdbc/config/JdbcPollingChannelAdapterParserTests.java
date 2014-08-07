@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,17 +30,18 @@ import javax.sql.DataSource;
 
 import org.junit.After;
 import org.junit.Test;
+
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.core.MessagingTemplate;
-import org.springframework.integration.core.PollableChannel;
 import org.springframework.integration.endpoint.SourcePollingChannelAdapter;
 import org.springframework.integration.history.MessageHistory;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.AbstractSqlParameterSource;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.PollableChannel;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
@@ -129,6 +130,20 @@ public class JdbcPollingChannelAdapterParserTests {
 	}
 
 	@Test
+	public void testSelectParameterSourceFactoryInboundChannelAdapter() {
+		setUp("pollingWithSelectParameterSourceJdbcInboundChannelAdapterTest.xml", getClass());
+		this.jdbcTemplate.update("insert into item values(1,'',42)");
+		Message<?> message = messagingTemplate.receive();
+		assertNotNull(message);
+		assertEquals(42, ((Map<?,?>) ((List<?> )message.getPayload()).get(0)).get("STATUS"));
+		this.jdbcTemplate.update("insert into item values(2,'',84)");
+		this.appCtx.getBean(Status.class).which = 84;
+		message = messagingTemplate.receive();
+		assertNotNull(message);
+		assertEquals(84, ((Map<?,?>) ((List<?> )message.getPayload()).get(0)).get("STATUS"));
+	}
+
+	@Test
 	public void testParameterSourceInboundChannelAdapter() {
 		setUp("pollingWithParametersForMapJdbcInboundChannelAdapterTest.xml", getClass());
 		this.jdbcTemplate.update("insert into item values(1,'',2)");
@@ -140,6 +155,7 @@ public class JdbcPollingChannelAdapterParserTests {
 	public void testMaxRowsInboundChannelAdapter() {
 		setUp("pollingWithMaxRowsJdbcInboundChannelAdapterTest.xml", getClass());
 		new TransactionTemplate(transactionManager).execute(new TransactionCallback<Void>() {
+			@Override
 			public Void doInTransaction(TransactionStatus status) {
 				jdbcTemplate.update("insert into item values(1,'',2)");
 				jdbcTemplate.update("insert into item values(2,'',2)");
@@ -150,7 +166,8 @@ public class JdbcPollingChannelAdapterParserTests {
 		});
 		int count = 0;
 		while (count < 4) {
-			Message<List<?>> message = messagingTemplate.receive();
+			@SuppressWarnings("unchecked")
+			Message<List<?>> message = (Message<List<?>>) messagingTemplate.receive();
 			assertNotNull(message);
 			int payloadSize = message.getPayload().size();
 			assertTrue(payloadSize <= 2);
@@ -183,7 +200,8 @@ public class JdbcPollingChannelAdapterParserTests {
 
 	protected void setupMessagingTemplate() {
 		PollableChannel pollableChannel = this.appCtx.getBean("target", PollableChannel.class);
-		this.messagingTemplate = new MessagingTemplate(pollableChannel);
+		this.messagingTemplate = new MessagingTemplate();
+		this.messagingTemplate.setDefaultDestination(pollableChannel);
 		this.messagingTemplate.setReceiveTimeout(500);
 	}
 
@@ -197,12 +215,24 @@ public class JdbcPollingChannelAdapterParserTests {
 
 	public static class TestSqlParameterSource extends AbstractSqlParameterSource {
 
+		@Override
 		public Object getValue(String paramName) throws IllegalArgumentException {
 			return 2;
 		}
 
+		@Override
 		public boolean hasValue(String paramName) {
 			return true;
+		}
+
+	}
+
+	public static class Status {
+
+		private int which = 42;
+
+		public int which() {
+			return this.which;
 		}
 
 	}

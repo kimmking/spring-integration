@@ -21,6 +21,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 
 import org.junit.Before;
@@ -29,13 +30,14 @@ import org.junit.runner.RunWith;
 
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.integration.annotation.MessageEndpoint;
 import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.integration.annotation.Splitter;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
@@ -65,6 +67,7 @@ public class SplitterIntegrationTests {
 	MessageChannel inDelimiters;
 
 	@Autowired
+	@Qualifier("splitter.handler")
 	MethodInvokingSplitter splitter;
 
 	private String sentence = "The quick brown fox jumped over the lazy dog";
@@ -93,8 +96,8 @@ public class SplitterIntegrationTests {
 	public static class TestSplitter {
 
 		@Splitter(inputChannel = "inAnnotated", outputChannel = "out")
-		public List<String> split(String sentence) {
-			return Arrays.asList(sentence.split("\\s"));
+		public Iterator<String> split(String sentence) {
+			return Arrays.asList(sentence.split("\\s")).iterator();
 		}
 	}
 

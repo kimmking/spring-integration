@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,17 +41,18 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.springframework.integration.Message;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.integration.expression.ExpressionUtils;
 import org.springframework.integration.file.filters.CompositeFileListFilter;
 import org.springframework.integration.file.filters.FileListFilter;
-import org.springframework.integration.file.remote.session.Session;
 import org.springframework.integration.metadata.PropertiesPersistingMetadataStore;
 import org.springframework.integration.sftp.filters.SftpPersistentAcceptOnceFileListFilter;
 import org.springframework.integration.sftp.filters.SftpRegexPatternFileListFilter;
 import org.springframework.integration.sftp.session.DefaultSftpSessionFactory;
+import org.springframework.integration.sftp.session.SftpSession;
 import org.springframework.integration.sftp.session.SftpTestSessionFactory;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
 
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.ChannelSftp.LsEntry;
@@ -92,7 +93,6 @@ public class SftpInboundRemoteFileSystemSynchronizerTests {
 		ftpSessionFactory.setPassword("frog");
 		ftpSessionFactory.setHost("foo.com");
 
-
 		SftpInboundFileSynchronizer synchronizer = spy(new SftpInboundFileSynchronizer(ftpSessionFactory));
 		synchronizer.setDeleteRemoteFiles(true);
 		synchronizer.setPreserveTimestamp(true);
@@ -113,6 +113,7 @@ public class SftpInboundRemoteFileSystemSynchronizerTests {
 				new SftpInboundFileSynchronizingMessageSource(synchronizer);
 		ms.setAutoCreateLocalDirectory(true);
 		ms.setLocalDirectory(localDirectoy);
+		ms.setBeanFactory(mock(BeanFactory.class));
 		ms.afterPropertiesSet();
 		Message<File> atestFile =  ms.receive();
 		assertNotNull(atestFile);
@@ -166,7 +167,7 @@ public class SftpInboundRemoteFileSystemSynchronizerTests {
 		}
 
 		@Override
-		public Session<LsEntry> getSession() {
+		public SftpSession getSession() {
 			if (this.sftpEntries.size() == 0) {
 				this.init();
 			}
@@ -182,7 +183,8 @@ public class SftpInboundRemoteFileSystemSynchronizerTests {
 
 				when(jschSession.openChannel("sftp")).thenReturn(channel);
 				return SftpTestSessionFactory.createSftpSession(jschSession);
-			} catch (Exception e) {
+			}
+			catch (Exception e) {
 				throw new RuntimeException("Failed to create mock sftp session", e);
 			}
 		}

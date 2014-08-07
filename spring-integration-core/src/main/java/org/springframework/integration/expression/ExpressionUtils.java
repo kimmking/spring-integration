@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014	 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import org.springframework.core.convert.ConversionService;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.expression.spel.support.StandardTypeConverter;
 import org.springframework.integration.context.IntegrationContextUtils;
+import org.springframework.integration.support.utils.IntegrationUtils;
 
 /**
  * Utility class with static methods for helping with establishing environments for
@@ -70,7 +71,7 @@ public abstract class ExpressionUtils {
 	/**
 	 * Obtains the context from the beanFactory if not null; emits a warning if the beanFactory
 	 * is null.
-	 * @param beanFactory
+	 * @param beanFactory The bean factory.
 	 * @return The evaluation context.
 	 */
 	public static StandardEvaluationContext createStandardEvaluationContext(BeanFactory beanFactory) {
@@ -88,7 +89,7 @@ public abstract class ExpressionUtils {
 		}
 		if (evaluationContext == null) {
 			if (beanFactory != null) {
-				conversionService = IntegrationContextUtils.getConversionService(beanFactory);
+				conversionService = IntegrationUtils.getConversionService(beanFactory);
 			}
 			evaluationContext = createStandardEvaluationContext(conversionService, beanFactory);
 		}

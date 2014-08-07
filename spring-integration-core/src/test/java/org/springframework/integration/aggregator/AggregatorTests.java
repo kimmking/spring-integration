@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -17,38 +17,176 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThat;
+import static org.mockito.Mockito.mock;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageHandlingException;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.channel.QueueChannel;
+import org.springframework.integration.handler.AbstractMessageHandler;
 import org.springframework.integration.store.MessageGroup;
 import org.springframework.integration.store.SimpleMessageStore;
 import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessageHandlingException;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.GenericMessage;
+import org.springframework.util.StopWatch;
 
 /**
  * @author Mark Fisher
  * @author Marius Bogoevici
  * @author Iwein Fuld
+ * @author Gary Russell
  */
 public class AggregatorTests {
 
+	private static final Log logger = LogFactory.getLog(AggregatorTests.class);
+
 	private AggregatingMessageHandler aggregator;
 
-	private SimpleMessageStore store = new SimpleMessageStore(50);
+	private final SimpleMessageStore store = new SimpleMessageStore(50);
 
+	List<MessageGroupExpiredEvent> expiryEvents = new ArrayList<MessageGroupExpiredEvent>();
 
 	@Before
 	public void configureAggregator() {
 		this.aggregator = new AggregatingMessageHandler(new MultiplyingProcessor(), store);
+		this.aggregator.setBeanFactory(mock(BeanFactory.class));
+		this.aggregator.setApplicationEventPublisher(new ApplicationEventPublisher() {
+
+			@Override
+			public void publishEvent(ApplicationEvent event) {
+				expiryEvents.add((MessageGroupExpiredEvent) event);
+			}
+		});
+		this.aggregator.setBeanName("testAggregator");
+		this.aggregator.afterPropertiesSet();
+		expiryEvents.clear();
 	}
 
+	@Test
+	public void testAggPerf() {
+		AggregatingMessageHandler handler = new AggregatingMessageHandler(new DefaultAggregatingMessageGroupProcessor());
+		handler.setCorrelationStrategy(new CorrelationStrategy() {
+
+			@Override
+			public Object getCorrelationKey(Message<?> message) {
+				return "foo";
+			}
+		});
+		handler.setReleaseStrategy(new MessageCountReleaseStrategy(60000));
+		handler.setExpireGroupsUponCompletion(true);
+		handler.setSendPartialResultOnExpiry(true);
+		DirectChannel outputChannel = new DirectChannel();
+		handler.setOutputChannel(outputChannel);
+		outputChannel.subscribe(new MessageHandler() {
+
+			@Override
+			public void handleMessage(Message<?> message) throws MessagingException {
+				logger.warn("Received " + ((Collection<?>) message.getPayload()).size());
+			}
+
+		});
+		Message<?> message = new GenericMessage<String>("foo");
+		StopWatch stopwatch = new StopWatch();
+		stopwatch.start();
+		for (int i=0; i < 120000; i++) {
+			if (i % 10000 == 0) {
+				stopwatch.stop();
+				logger.warn("Sent " + i + " in " + stopwatch.getTotalTimeSeconds() +
+						" (10k in " + stopwatch.getLastTaskTimeMillis() + "ms)");
+				stopwatch.start();
+			}
+			handler.handleMessage(message);
+		}
+		stopwatch.stop();
+		logger.warn("Sent " + 120000 + " in " + stopwatch.getTotalTimeSeconds() +
+				" (10k in " + stopwatch.getLastTaskTimeMillis() + "ms)");
+	}
+
+	@Test
+	public void testCustomAggPerf() {
+		class CustomHandler extends AbstractMessageHandler {
+
+			// custom aggregator, only handles a single correlation
+
+			private final ReentrantLock lock = new ReentrantLock();
+
+			private final Collection<Message<?>> messages = new ArrayList<Message<?>>(60000);
+
+			private final MessageChannel outputChannel;
+
+			private CustomHandler(MessageChannel outputChannel) {
+				this.outputChannel = outputChannel;
+			}
+
+			@Override
+			public void handleMessageInternal(Message<?> requestMessage) {
+				lock.lock();
+				try {
+					this.messages.add(requestMessage);
+					if (this.messages.size() == 60000) {
+						List<Object> payloads = new ArrayList<Object>(this.messages.size());
+						for (Message<?> message : this.messages) {
+							payloads.add(message.getPayload());
+						}
+						this.messages.clear();
+						outputChannel.send(getMessageBuilderFactory().withPayload(payloads)
+								.copyHeaders(requestMessage.getHeaders())
+								.build());
+					}
+				}
+				finally {
+					lock.unlock();
+				}
+			}
+
+		}
+
+		DirectChannel outputChannel = new DirectChannel();
+		CustomHandler handler = new CustomHandler(outputChannel);
+		outputChannel.subscribe(new MessageHandler() {
+
+			@Override
+			public void handleMessage(Message<?> message) throws MessagingException {
+				logger.warn("Received " + ((Collection<?>) message.getPayload()).size());
+			}
+
+		});
+		Message<?> message = new GenericMessage<String>("foo");
+		StopWatch stopwatch = new StopWatch();
+		stopwatch.start();
+		for (int i=0; i < 120000; i++) {
+			if (i % 10000 == 0) {
+				stopwatch.stop();
+				logger.warn("Sent " + i + " in " + stopwatch.getTotalTimeSeconds() +
+						" (10k in " + stopwatch.getLastTaskTimeMillis() + "ms)");
+				stopwatch.start();
+			}
+			handler.handleMessage(message);
+		}
+		stopwatch.stop();
+		logger.warn("Sent " + 120000 + " in " + stopwatch.getTotalTimeSeconds() +
+				" (10k in " + stopwatch.getLastTaskTimeMillis() + "ms)");
+	}
 
 	@Test
 	public void testCompleteGroupWithinTimeout() throws InterruptedException {
@@ -79,6 +217,11 @@ public class AggregatorTests {
 		Message<?> discardedMessage = discardChannel.receive(1000);
 		assertNotNull("A message should have been discarded", discardedMessage);
 		assertEquals(message, discardedMessage);
+		assertEquals(1, expiryEvents.size());
+		assertSame(this.aggregator, expiryEvents.get(0).getSource());
+		assertEquals("ABC", this.expiryEvents.get(0).getGroupId());
+		assertEquals(1, this.expiryEvents.get(0).getMessageCount());
+		assertEquals(true, this.expiryEvents.get(0).isDiscarded());
 	}
 
 	@Test
@@ -93,6 +236,43 @@ public class AggregatorTests {
 		Message<?> reply = replyChannel.receive(1000);
 		assertNotNull("A reply message should have been received", reply);
 		assertEquals(15, reply.getPayload());
+		assertEquals(1, expiryEvents.size());
+		assertSame(this.aggregator, expiryEvents.get(0).getSource());
+		assertEquals("ABC", this.expiryEvents.get(0).getGroupId());
+		assertEquals(2, this.expiryEvents.get(0).getMessageCount());
+		assertEquals(false, this.expiryEvents.get(0).isDiscarded());
+		Message<?> message3 = createMessage(5, "ABC", 3, 3, replyChannel, null);
+		this.aggregator.handleMessage(message3);
+		assertEquals(1, this.store.getMessageGroup("ABC").size());
+	}
+
+	@Test
+	public void testGroupRemainsAfterTimeout() throws InterruptedException {
+		this.aggregator.setSendPartialResultOnExpiry(true);
+		this.aggregator.setExpireGroupsUponTimeout(false);
+		QueueChannel replyChannel = new QueueChannel();
+		QueueChannel discardChannel = new QueueChannel();
+		this.aggregator.setDiscardChannel(discardChannel);
+		Message<?> message1 = createMessage(3, "ABC", 3, 1, replyChannel, null);
+		Message<?> message2 = createMessage(5, "ABC", 3, 2, replyChannel, null);
+		this.aggregator.handleMessage(message1);
+		this.aggregator.handleMessage(message2);
+		this.store.expireMessageGroups(-10000);
+		Message<?> reply = replyChannel.receive(1000);
+		assertNotNull("A reply message should have been received", reply);
+		assertEquals(15, reply.getPayload());
+		assertEquals(1, expiryEvents.size());
+		assertSame(this.aggregator, expiryEvents.get(0).getSource());
+		assertEquals("ABC", this.expiryEvents.get(0).getGroupId());
+		assertEquals(2, this.expiryEvents.get(0).getMessageCount());
+		assertEquals(false, this.expiryEvents.get(0).isDiscarded());
+		assertEquals(0, this.store.getMessageGroup("ABC").size());
+		Message<?> message3 = createMessage(5, "ABC", 3, 3, replyChannel, null);
+		this.aggregator.handleMessage(message3);
+		assertEquals(0, this.store.getMessageGroup("ABC").size());
+		Message<?> discardedMessage = discardChannel.receive(1000);
+		assertNotNull("A message should have been discarded", discardedMessage);
+		assertSame(message3, discardedMessage);
 	}
 
 	@Test
@@ -204,20 +384,6 @@ public class AggregatorTests {
 		assertThat(((Integer) reply.getPayload()), is(105));
 	}
 
-	@Test
-	public void testNullReturningAggregator() throws InterruptedException {
-		this.aggregator = new AggregatingMessageHandler(new NullReturningMessageProcessor(), new SimpleMessageStore(50));
-		QueueChannel replyChannel = new QueueChannel();
-		Message<?> message1 = createMessage(3, "ABC", 3, 1, replyChannel, null);
-		Message<?> message2 = createMessage(5, "ABC", 3, 2, replyChannel, null);
-		Message<?> message3 = createMessage(7, "ABC", 3, 3, replyChannel, null);
-		this.aggregator.handleMessage(message1);
-		this.aggregator.handleMessage(message2);
-		this.aggregator.handleMessage(message3);
-		Message<?> reply = replyChannel.receive(1000);
-		assertNull(reply);
-	}
-
 
 	private static Message<?> createMessage(Object payload, Object correlationId, int sequenceSize, int sequenceNumber,
 			MessageChannel replyChannel, String predefinedId) {
@@ -231,6 +397,7 @@ public class AggregatorTests {
 
 
 	private class MultiplyingProcessor implements MessageGroupProcessor {
+		@Override
 		public Object processMessageGroup(MessageGroup group) {
 			Integer product = 1;
 			for (Message<?> message : group.getMessages()) {
@@ -240,11 +407,5 @@ public class AggregatorTests {
 		}
 	}
 
-
-	private class NullReturningMessageProcessor implements MessageGroupProcessor {
-		public Object processMessageGroup(MessageGroup group) {
-			return null;
-		}
-	}
 
 }

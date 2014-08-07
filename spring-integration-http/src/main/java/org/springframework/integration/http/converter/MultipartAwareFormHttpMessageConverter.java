@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.converter.HttpMessageNotWritableException;
-import org.springframework.http.converter.xml.XmlAwareFormHttpMessageConverter;
+import org.springframework.http.converter.support.AllEncompassingFormHttpMessageConverter;
 import org.springframework.integration.http.multipart.DefaultMultipartFileReader;
 import org.springframework.integration.http.multipart.MultipartFileReader;
 import org.springframework.integration.http.multipart.MultipartHttpInputMessage;
@@ -38,9 +38,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 /**
  * An {@link HttpMessageConverter} implementation that delegates to an instance of
- * {@link XmlAwareFormHttpMessageConverter} while adding the capability to <i>read</i>
+ * {@link AllEncompassingFormHttpMessageConverter} while adding the capability to <i>read</i>
  * <code>multipart/form-data</code> content in an HTTP request.
- * 
+ *
  * @author Mark Fisher
  * @since 2.0
  */
@@ -48,11 +48,13 @@ public class MultipartAwareFormHttpMessageConverter implements HttpMessageConver
 
 	private volatile MultipartFileReader<?> multipartFileReader = new DefaultMultipartFileReader();
 
-	private final XmlAwareFormHttpMessageConverter wrappedConverter = new XmlAwareFormHttpMessageConverter();
+	private final AllEncompassingFormHttpMessageConverter wrappedConverter = new AllEncompassingFormHttpMessageConverter();
 
 
 	/**
 	 * Sets the character set used for writing form data.
+	 *
+	 * @param charset The charset.
 	 */
 	public void setCharset(Charset charset) {
 		this.wrappedConverter.setCharset(charset);
@@ -60,16 +62,20 @@ public class MultipartAwareFormHttpMessageConverter implements HttpMessageConver
 
 	/**
 	 * Specify the {@link MultipartFileReader} to use when reading {@link MultipartFile} content.
+	 *
+	 * @param multipartFileReader The multipart file reader.
 	 */
 	public void setMultipartFileReader(MultipartFileReader<?> multipartFileReader) {
 		Assert.notNull(multipartFileReader, "multipartFileReader must not be null");
 		this.multipartFileReader = multipartFileReader;
 	}
 
+	@Override
 	public List<MediaType> getSupportedMediaTypes() {
 		return this.wrappedConverter.getSupportedMediaTypes();
 	}
 
+	@Override
 	public boolean canRead(Class<?> clazz, MediaType mediaType) {
 		if (!(MultiValueMap.class.isAssignableFrom(clazz) || byte[].class.isAssignableFrom(clazz))) {
 			return false;
@@ -83,10 +89,12 @@ public class MultipartAwareFormHttpMessageConverter implements HttpMessageConver
 		}
 	}
 
+	@Override
 	public boolean canWrite(Class<?> clazz, MediaType mediaType) {
 		return this.wrappedConverter.canWrite(clazz, mediaType);
 	}
 
+	@Override
 	public MultiValueMap<String, ?> read(Class<? extends MultiValueMap<String, ?>> clazz,
 			HttpInputMessage inputMessage) throws IOException, HttpMessageNotReadableException {
 
@@ -118,6 +126,7 @@ public class MultipartAwareFormHttpMessageConverter implements HttpMessageConver
 		return resultMap;
 	}
 
+	@Override
 	public void write(MultiValueMap<String, ?> map, MediaType contentType, HttpOutputMessage outputMessage)
 			throws IOException, HttpMessageNotWritableException {
 		this.wrappedConverter.write(map, contentType, outputMessage);

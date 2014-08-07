@@ -54,6 +54,7 @@
       <year>2011</year>
       <year>2012</year>
       <year>2013</year>
+      <year>2014</year>
       <holder>
           GoPivotal, Inc. All Rights Reserved.
       </holder>
@@ -69,9 +70,9 @@
     <partintro id="spring-integration-intro">
         <para>
          For those who are already familiar with Spring Integration, this chapter
-         provides a brief overview of the new features of version 2.2. If you are
+         provides a brief overview of the new features of version 4.1. If you are
          interested in the changes and features, that were introduced in earlier
-         versions, please take a look at chapter:
+         versions, please see chapter:
 
          <xref linkend="history"/>
 
@@ -115,12 +116,13 @@
    <xi:include href="./system-management.xml"/>
   </part>
   <part id="spring-integration-adapters">
-    <title>Integration Adapters</title>
+    <title>Integration Endpoints</title>
     <partintro id="spring-integration-adapters">
     	<para>This section covers the various Channel Adapters and Messaging Gateways provided
 		  by Spring Integration to support Message-based communication with external systems.
 		</para>
     </partintro>
+      <xi:include href="./endpoint-summary.xml"/>
       <xi:include href="./amqp.xml"/>
       <xi:include href="./event.xml"/>
       <xi:include href="./feed.xml"/>
@@ -128,18 +130,19 @@
       <xi:include href="./ftp.xml"/>
       <xi:include href="./gemfire.xml"/>
       <xi:include href="./http.xml"/>
-      <xi:include href="./ip.xml"/>
       <xi:include href="./jdbc.xml"/>
       <xi:include href="./jpa.xml"/>
       <xi:include href="./jms.xml"/>
       <xi:include href="./mail.xml"/>
       <xi:include href="./mongodb.xml"/>
+      <xi:include href="./mqtt.xml"/>
       <xi:include href="./redis.xml"/>
       <xi:include href="./resource.xml"/>
       <xi:include href="./rmi.xml"/>
       <xi:include href="./sftp.xml"/>
       <xi:include href="./stream.xml"/>
       <xi:include href="./syslog.xml"/>
+      <xi:include href="./ip.xml"/>
       <xi:include href="./twitter.xml"/>
       <xi:include href="./ws.xml"/>
 	  <xi:include href="./xml.xml"/>

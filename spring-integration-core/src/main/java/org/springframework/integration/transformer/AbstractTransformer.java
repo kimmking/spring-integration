@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2009 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,18 @@
 
 package org.springframework.integration.transformer;
 
-import org.springframework.integration.Message;
 import org.springframework.integration.context.IntegrationObjectSupport;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
 
 /**
  * A base class for {@link Transformer} implementations.
- * 
+ *
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  */
 public abstract class AbstractTransformer extends IntegrationObjectSupport implements Transformer {
 
+	@Override
 	public final Message<?> transform(Message<?> message) {
 		try {
 			Object result = this.doTransform(message);
@@ -35,7 +35,7 @@ public abstract class AbstractTransformer extends IntegrationObjectSupport imple
 				return null;
 			}
 			return (result instanceof Message) ? (Message<?>) result
-					: MessageBuilder.withPayload(result).copyHeaders(message.getHeaders()).build();
+					: this.getMessageBuilderFactory().withPayload(result).copyHeaders(message.getHeaders()).build();
 		}
 		catch (MessageTransformationException e) {
 			throw e;
@@ -50,6 +50,10 @@ public abstract class AbstractTransformer extends IntegrationObjectSupport imple
 	 * logic. If the return value is itself a Message, it will be used as the
 	 * result. Otherwise, any non-null return value will be used as the payload
 	 * of the result Message.
+	 *
+	 * @param message The message.
+	 * @return The result of the transformation.
+	 * @throws Exception Any exception.
 	 */
 	protected abstract Object doTransform(Message<?> message) throws Exception;
 

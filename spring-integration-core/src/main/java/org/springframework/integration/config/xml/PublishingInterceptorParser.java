@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,37 +29,44 @@ import org.springframework.beans.factory.support.BeanDefinitionReaderUtils;
 import org.springframework.beans.factory.support.ManagedMap;
 import org.springframework.beans.factory.xml.AbstractBeanDefinitionParser;
 import org.springframework.beans.factory.xml.ParserContext;
+import org.springframework.integration.aop.MessagePublishingInterceptor;
+import org.springframework.integration.aop.MethodNameMappingPublisherMetadataSource;
 import org.springframework.integration.context.IntegrationContextUtils;
+import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
 import org.springframework.util.StringUtils;
 import org.springframework.util.xml.DomUtils;
 
 /**
  * Parser for the &lt;publishing-interceptor&gt; element.
- * 
+ *
  * @author Oleg Zhurakousky
  * @author Mark Fisher
+ * @author Gary Russell
  * @since 2.0
  */
 public class PublishingInterceptorParser extends AbstractBeanDefinitionParser {
 
+	@Override
 	protected AbstractBeanDefinition parseInternal(Element element, ParserContext parserContext) {
 		BeanDefinitionBuilder rootBuilder = BeanDefinitionBuilder.genericBeanDefinition(
-				IntegrationNamespaceUtils.BASE_PACKAGE + ".aop.MessagePublishingInterceptor");
-		BeanDefinitionBuilder spelSourceBuilder = BeanDefinitionBuilder.genericBeanDefinition(
-				"org.springframework.integration.aop.MethodNameMappingPublisherMetadataSource");
+				MessagePublishingInterceptor.class);
+		BeanDefinitionBuilder spelSourceBuilder = BeanDefinitionBuilder
+				.genericBeanDefinition(MethodNameMappingPublisherMetadataSource.class);
 		Map<String, Map<?,?>> mappings = this.getMappings(element, element.getAttribute("default-channel"), parserContext);
 		spelSourceBuilder.addConstructorArgValue(mappings.get("payload"));
 		if (mappings.get("headers") != null) {
 			spelSourceBuilder.addPropertyValue("headerExpressionMap", mappings.get("headers"));
 		}
+
 		BeanDefinitionBuilder chResolverBuilder = BeanDefinitionBuilder.genericBeanDefinition(
-				"org.springframework.integration.support.channel.BeanFactoryChannelResolver");
+				BeanFactoryChannelResolver.class);
+
 		if (mappings.get("channels") != null){
 			spelSourceBuilder.addPropertyValue("channelMap", mappings.get("channels"));
 		}
-		String chResolverName = 
+		String chResolverName =
 				BeanDefinitionReaderUtils.registerWithGeneratedName(chResolverBuilder.getBeanDefinition(), parserContext.getRegistry());
-		String defaultChannel = StringUtils.hasText(element.getAttribute("default-channel")) ? 
+		String defaultChannel = StringUtils.hasText(element.getAttribute("default-channel")) ?
 				element.getAttribute("default-channel") : IntegrationContextUtils.NULL_CHANNEL_BEAN_NAME;
 		rootBuilder.addConstructorArgValue(spelSourceBuilder.getBeanDefinition());
 		rootBuilder.addPropertyReference("channelResolver", chResolverName);
@@ -74,12 +81,12 @@ public class PublishingInterceptorParser extends AbstractBeanDefinitionParser {
 		Map<String, Map<String, String>> headersExpressionMap = new HashMap<String, Map<String, String>>();
 		Map<String, String> channelMap = new HashMap<String, String>();
 		ManagedMap<String, Object> resolvableChannelMap = new ManagedMap<String, Object>();
-		if (mappings != null && mappings.size() > 0) {	
+		if (mappings != null && mappings.size() > 0) {
 			for (Element mapping : mappings) {
 				// set payloadMap
-				String methodPattern = StringUtils.hasText(mapping.getAttribute("pattern")) ? 
+				String methodPattern = StringUtils.hasText(mapping.getAttribute("pattern")) ?
 						mapping.getAttribute("pattern") : "*";
-				String payloadExpression = StringUtils.hasText(mapping.getAttribute("payload")) ? 
+				String payloadExpression = StringUtils.hasText(mapping.getAttribute("payload")) ?
 						mapping.getAttribute("payload") : "#return";
 				payloadExpressionMap.put(methodPattern, payloadExpression);
 
@@ -117,7 +124,7 @@ public class PublishingInterceptorParser extends AbstractBeanDefinitionParser {
 				channelMap.put(methodPattern, channel);
 				resolvableChannelMap.put(channel, new RuntimeBeanReference(channel));
 			}
-		} 
+		}
 		if (payloadExpressionMap.size() == 0) {
 			payloadExpressionMap.put("*", "#return");
 		}

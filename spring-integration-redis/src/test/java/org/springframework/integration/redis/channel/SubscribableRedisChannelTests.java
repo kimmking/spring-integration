@@ -33,13 +33,13 @@ import org.springframework.beans.factory.BeanFactory;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageHandler;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.redis.rules.RedisAvailable;
 import org.springframework.integration.redis.rules.RedisAvailableTests;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.util.ReflectionUtils;
 /**
  * @author Oleg Zhurakousky
@@ -60,7 +60,8 @@ public class SubscribableRedisChannelTests extends RedisAvailableTests {
 		channel.afterPropertiesSet();
 		channel.start();
 
-		this.awaitContainerSubscribed(TestUtils.getPropertyValue(channel, "container", RedisMessageListenerContainer.class));
+		this.awaitContainerSubscribed(TestUtils.getPropertyValue(channel, "container",
+				RedisMessageListenerContainer.class));
 
 		final CountDownLatch latch = new CountDownLatch(3);
 		MessageHandler handler = new MessageHandler() {
@@ -75,7 +76,7 @@ public class SubscribableRedisChannelTests extends RedisAvailableTests {
 		channel.send(new GenericMessage<String>("1"));
 		channel.send(new GenericMessage<String>("2"));
 		channel.send(new GenericMessage<String>("3"));
-		assertTrue(latch.await(5, TimeUnit.SECONDS));
+		assertTrue(latch.await(20, TimeUnit.SECONDS));
 	}
 
 	@Test
@@ -96,13 +97,15 @@ public class SubscribableRedisChannelTests extends RedisAvailableTests {
 		MessageListenerAdapter listener = channelMapping.entrySet().iterator().next().getValue().iterator().next();
 		Object delegate = TestUtils.getPropertyValue(listener, "delegate");
 		try {
-			ReflectionUtils.findMethod(delegate.getClass(), "handleMessage", String.class).invoke(delegate, "Hello, world!");
+			ReflectionUtils.findMethod(delegate.getClass(), "handleMessage", String.class).invoke(delegate,
+					"Hello, world!");
 			fail("Exception expected");
 		}
 		catch (InvocationTargetException e) {
 			Throwable cause = e.getCause();
 			assertNotNull(cause);
-			assertEquals("Dispatcher has no subscribers for redis-channel 'si.test.channel.no.subs' (dhnsChannel).", cause.getMessage());
+			assertEquals("Dispatcher has no subscribers for redis-channel 'si.test.channel.no.subs' (dhnsChannel).",
+					cause.getMessage());
 		}
 
 	}

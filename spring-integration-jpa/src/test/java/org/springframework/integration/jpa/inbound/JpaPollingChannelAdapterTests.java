@@ -34,8 +34,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.expression.common.LiteralExpression;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.endpoint.SourcePollingChannelAdapter;
 import org.springframework.integration.jpa.core.JpaExecutor;
 import org.springframework.integration.jpa.core.JpaOperations;
@@ -44,6 +42,8 @@ import org.springframework.integration.jpa.test.JpaTestUtils;
 import org.springframework.integration.jpa.test.TestTrigger;
 import org.springframework.integration.jpa.test.entity.StudentDomain;
 import org.springframework.integration.scheduling.PollerMetadata;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -278,6 +278,7 @@ public class JpaPollingChannelAdapterTests {
 		jpaExecutor.setJpaQuery("from Student s");
 		jpaExecutor.setDeleteAfterPoll(true);
 		jpaExecutor.setDeleteInBatch(true);
+		jpaExecutor.setFlush(true);
 		jpaExecutor.afterPropertiesSet();
 
 		final JpaPollingChannelAdapter jpaPollingChannelAdapter = new JpaPollingChannelAdapter(jpaExecutor);
@@ -306,9 +307,7 @@ public class JpaPollingChannelAdapterTests {
 
 		assertTrue(students.size() == 3);
 
-		Long studentCount = waitForDeletes(students);
-
-		assertEquals(Long.valueOf(0), studentCount);
+		assertEquals(Long.valueOf(0), entityManager.createQuery("select count(*) from Student", Long.class).getSingleResult());
 
 	}
 

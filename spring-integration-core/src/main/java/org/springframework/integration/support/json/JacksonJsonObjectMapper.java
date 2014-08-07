@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import java.net.URL;
 import java.util.Collection;
 import java.util.Map;
 
+import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.JavaType;
@@ -37,10 +38,13 @@ import org.springframework.util.Assert;
  * Delegates <code>toJson</code> and <code>fromJson</code>
  * to the {@linkplain org.codehaus.jackson.map.ObjectMapper}
  *
+ * @deprecated Please migrate to {@link Jackson2JsonObjectMapper} for Jackson 2.x.
+ *
  * @author Artem Bilan
  * @since 3.0
  */
-public class JacksonJsonObjectMapper extends AbstractJacksonJsonObjectMapper<JsonParser, JavaType> {
+@Deprecated
+public class JacksonJsonObjectMapper extends AbstractJacksonJsonObjectMapper<JsonNode, JsonParser, JavaType> {
 
 	private final ObjectMapper objectMapper;
 
@@ -61,6 +65,11 @@ public class JacksonJsonObjectMapper extends AbstractJacksonJsonObjectMapper<Jso
 	@Override
 	public void toJson(Object value, Writer writer) throws Exception {
 		this.objectMapper.writeValue(writer, value);
+	}
+
+	@Override
+	public JsonNode toJsonNode(Object value) throws Exception {
+		return this.objectMapper.valueToTree(value);
 	}
 
 	@Override

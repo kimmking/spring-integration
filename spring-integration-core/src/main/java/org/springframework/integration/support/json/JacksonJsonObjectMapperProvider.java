@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,11 +28,11 @@ package org.springframework.integration.support.json;
  * @since 3.0
  *
  * @see Jackson2JsonObjectMapper
- * @see JacksonJsonObjectMapper
  */
 public final class JacksonJsonObjectMapperProvider {
 
-	public static JsonObjectMapper<?> newInstance() {
+	@SuppressWarnings("deprecation")
+	public static JsonObjectMapper<?, ?> newInstance() {
 		if (JacksonJsonUtils.isJackson2Present()) {
 			return new Jackson2JsonObjectMapper();
 		}

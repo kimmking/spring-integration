@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,23 +22,26 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.BeanFactory;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
-import org.springframework.integration.support.channel.ChannelResolutionException;
-import org.springframework.integration.support.channel.ChannelResolver;
+import org.springframework.jmx.export.annotation.ManagedAttribute;
 import org.springframework.jmx.export.annotation.ManagedOperation;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.core.DestinationResolutionException;
+import org.springframework.messaging.core.DestinationResolver;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
  * Base class for all Message Routers that support mapping from arbitrary String values
  * to Message Channel names.
- * 
+ *
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  * @author Gunnar Hillert
@@ -49,7 +52,7 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 
 	private volatile Map<String, String> channelMappings = new ConcurrentHashMap<String, String>();
 
-	private volatile ChannelResolver channelResolver;
+	private volatile DestinationResolver<MessageChannel> channelResolver;
 
 	private volatile String prefix;
 
@@ -60,32 +63,36 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 
 	/**
 	 * Provide mappings from channel keys to channel names.
-	 * Channel names will be resolved by the {@link ChannelResolver}.
+	 * Channel names will be resolved by the {@link DestinationResolver}.
+	 *
+	 * @param channelMappings The channel mappings.
 	 */
+	@Override
+	@ManagedAttribute
 	public void setChannelMappings(Map<String, String> channelMappings) {
-		Map<String, String> oldChannelMappings = this.channelMappings;
+		Assert.notNull(channelMappings, "'channelMappings' must not be null");
 		Map<String, String> newChannelMappings = new ConcurrentHashMap<String, String>();
 		newChannelMappings.putAll(channelMappings);
-		this.channelMappings = newChannelMappings;
-		if (logger.isDebugEnabled()) {
-			logger.debug("Channel mappings:" + oldChannelMappings
-					+ " replaced with:" + newChannelMappings);
-		}
+		this.doSetChannelMappings(newChannelMappings);
 	}
 
 	/**
-	 * Specify the {@link ChannelResolver} strategy to use.
+	 * Specify the {@link DestinationResolver} strategy to use.
 	 * The default is a BeanFactoryChannelResolver.
 	 * This is considered an infrastructural configuration option and
 	 * as of 2.1 has been deprecated as a configuration-driven attribute.
+	 *
+	 * @param channelResolver The channel resolver.
 	 */
-	public void setChannelResolver(ChannelResolver channelResolver) {
+	public void setChannelResolver(DestinationResolver<MessageChannel> channelResolver) {
 		Assert.notNull(channelResolver, "'channelResolver' must not be null");
 		this.channelResolver = channelResolver;
 	}
 
 	/**
 	 * Specify a prefix to be added to each channel name prior to resolution.
+	 *
+	 * @param prefix The prefix.
 	 */
 	public void setPrefix(String prefix) {
 		this.prefix = prefix;
@@ -93,6 +100,8 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 
 	/**
 	 * Specify a suffix to be added to each channel name prior to resolution.
+	 *
+	 * @param suffix The suffix.
 	 */
 	public void setSuffix(String suffix) {
 		this.suffix = suffix;
@@ -101,6 +110,8 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 	/**
 	 * Specify whether this router should ignore any failure to resolve a channel name to
 	 * an actual MessageChannel instance when delegating to the ChannelResolver strategy.
+	 *
+	 * @param resolutionRequired true if resolution is required.
 	 */
 	public void setResolutionRequired(boolean resolutionRequired) {
 		this.resolutionRequired = resolutionRequired;
@@ -109,14 +120,22 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 	/**
 	 * Returns an unmodifiable version of the channel mappings.
 	 * This is intended for use by subclasses only.
+	 *
+	 * @return The channel mappings.
 	 */
-	protected Map<String, String> getChannelMappings() {
+	@Override
+	@ManagedAttribute
+	public Map<String, String> getChannelMappings() {
 		return Collections.unmodifiableMap(this.channelMappings);
 	}
 
 	/**
 	 * Add a channel mapping from the provided key to channel name.
+	 *
+	 * @param key The key.
+	 * @param channelName The channel name.
 	 */
+	@Override
 	@ManagedOperation
 	public void setChannelMapping(String key, String channelName) {
 		this.channelMappings.put(key, channelName);
@@ -124,7 +143,10 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 
 	/**
 	 * Remove a channel mapping for the given key if present.
+	 *
+	 * @param key The key.
 	 */
+	@Override
 	@ManagedOperation
 	public void removeChannelMapping(String key) {
 		this.channelMappings.remove(key);
@@ -132,6 +154,12 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 
 	@Override
 	public void onInit() {
+		try {
+			super.onInit();
+		}
+		catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
 		BeanFactory beanFactory = this.getBeanFactory();
 		if (this.channelResolver == null && beanFactory != null) {
 			this.channelResolver = new BeanFactoryChannelResolver(beanFactory);
@@ -142,6 +170,9 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 	 * Subclasses must implement this method to return the channel keys.
 	 * A "key" might be present in this router's "channelMappings", or it
 	 * could be the channel's name or even the Message Channel instance itself.
+	 *
+	 * @param message The message.
+	 * @return The channel keys.
 	 */
 	protected abstract List<Object> getChannelKeys(Message<?> message);
 
@@ -154,6 +185,38 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 		return channels;
 	}
 
+	/**
+	 * Convenience method allowing conversion of a list
+	 * of mappings in a control-bus message.
+	 * <p>This is intended to be called via a control-bus; keys and values that are not
+	 * Strings will be ignored.
+	 * <p>Mappings must be delimited with newlines, for example:
+	 * <p>{@code "@'myRouter.handler'.replaceChannelMappings('foo=qux \n baz=bar')"}.
+	 * @param channelMappings The channel mappings.
+	 *
+	 * @since 4.0
+	 */
+	@Override
+	@ManagedOperation
+	public void replaceChannelMappings(Properties channelMappings) {
+		Assert.notNull(channelMappings, "'channelMappings' must not be null");
+		Map<String, String> newChannelMappings = new ConcurrentHashMap<String, String>();
+		Set<String> keys = channelMappings.stringPropertyNames();
+		for (String key : keys) {
+			newChannelMappings.put(key.trim(), channelMappings.getProperty(key).trim());
+		}
+		this.doSetChannelMappings(newChannelMappings);
+	}
+
+	private void doSetChannelMappings(Map<String, String> newChannelMappings) {
+		Map<String, String> oldChannelMappings = this.channelMappings;
+		this.channelMappings = newChannelMappings;
+		if (logger.isDebugEnabled()) {
+			logger.debug("Channel mappings:" + oldChannelMappings
+					+ " replaced with:" + newChannelMappings);
+		}
+	}
+
 	private MessageChannel resolveChannelForName(String channelName, Message<?> message) {
 		if (this.channelResolver == null) {
 			this.onInit();
@@ -161,9 +224,9 @@ public abstract class AbstractMappingMessageRouter extends AbstractMessageRouter
 		Assert.state(this.channelResolver != null, "unable to resolve channel names, no ChannelResolver available");
 		MessageChannel channel = null;
 		try {
-			channel = this.channelResolver.resolveChannelName(channelName);
+			channel = this.channelResolver.resolveDestination(channelName);
 		}
-		catch (ChannelResolutionException e) {
+		catch (DestinationResolutionException e) {
 			if (this.resolutionRequired) {
 				throw new MessagingException(message, "failed to resolve channel name '" + channelName + "'", e);
 			}

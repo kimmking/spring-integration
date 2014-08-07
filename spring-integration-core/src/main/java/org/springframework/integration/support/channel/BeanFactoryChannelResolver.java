@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,20 +22,26 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.context.IntegrationContextUtils;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.core.DestinationResolutionException;
+import org.springframework.messaging.core.DestinationResolver;
 import org.springframework.util.Assert;
 
 /**
- * {@link ChannelResolver} implementation based on a Spring {@link BeanFactory}.
+ * {@link DestinationResolver} implementation based on a Spring {@link BeanFactory}.
  *
  * <p>Will lookup Spring managed beans identified by bean name,
  * expecting them to be of type {@link MessageChannel}.
  *
+ * Consults a {@link HeaderChannelRegistry}, if available, if the bean is not found.
+ *
  * @author Mark Fisher
+ * @author Gary Russell
+ *
  * @see org.springframework.beans.factory.BeanFactory
  */
-public class BeanFactoryChannelResolver implements ChannelResolver, BeanFactoryAware {
+public class BeanFactoryChannelResolver implements DestinationResolver<MessageChannel>, BeanFactoryAware {
 
 	private final static Log logger = LogFactory.getLog(BeanFactoryChannelResolver.class);
 
@@ -82,12 +88,12 @@ public class BeanFactoryChannelResolver implements ChannelResolver, BeanFactoryA
 					HeaderChannelRegistry.class);
 		}
 		catch (Exception e) {
-			logger.warn("No HeaderChannelRegistry found", e);
+			logger.debug("No HeaderChannelRegistry found");
 		}
 	}
 
 	@Override
-	public MessageChannel resolveChannelName(String name) {
+	public MessageChannel resolveDestination(String name) {
 		Assert.state(this.beanFactory != null, "BeanFactory is required");
 		try {
 			return this.beanFactory.getBean(name, MessageChannel.class);
@@ -99,8 +105,9 @@ public class BeanFactoryChannelResolver implements ChannelResolver, BeanFactoryA
 					return channel;
 				}
 			}
-			throw new ChannelResolutionException(
-					"failed to look up MessageChannel bean with name '" + name + "'", e);
+			throw new DestinationResolutionException(
+					"failed to look up MessageChannel with name '" + name + "' in the BeanFactory"
+					+ (this.replyChannelRegistry == null ? " (and there is no HeaderChannelRegistry present)." : "."), e);
 		}
 	}
 

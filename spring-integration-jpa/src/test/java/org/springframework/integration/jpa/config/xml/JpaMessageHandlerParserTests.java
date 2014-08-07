@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -24,21 +24,22 @@ import org.junit.After;
 import org.junit.Test;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 import org.springframework.integration.channel.AbstractMessageChannel;
-import org.springframework.integration.core.MessageHandler;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.integration.endpoint.EventDrivenConsumer;
 import org.springframework.integration.handler.advice.AbstractRequestHandlerAdvice;
 import org.springframework.integration.jpa.core.JpaExecutor;
 import org.springframework.integration.jpa.core.JpaOperations;
 import org.springframework.integration.jpa.support.JpaParameter;
 import org.springframework.integration.jpa.support.PersistMode;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.test.util.TestUtils;
 
 /**
  *
  * @author Gunnar Hillert
+ * @author Artem Bilan
  * @since 2.2
  *
  */
@@ -81,6 +82,8 @@ public class JpaMessageHandlerParserTests {
 		assertNotNull(jpaParameters);
 		assertTrue(jpaParameters.size() == 3);
 
+		assertEquals(Integer.valueOf(10), TestUtils.getPropertyValue(jpaExecutor, "flushSize", Integer.class));
+		assertTrue(TestUtils.getPropertyValue(jpaExecutor, "clearOnFlush", Boolean.class));
 	}
 
 	@Test

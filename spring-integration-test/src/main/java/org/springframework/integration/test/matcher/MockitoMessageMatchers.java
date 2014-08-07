@@ -24,7 +24,7 @@ import java.util.Map;
 import org.hamcrest.Matcher;
 import org.mockito.Mockito;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 
 /**
  * Mockito matcher factory for {@link Message} matcher creation.

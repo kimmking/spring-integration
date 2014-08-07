@@ -29,13 +29,15 @@ import java.util.Map;
 import javax.net.SocketFactory;
 
 import org.junit.Test;
+
 import org.springframework.core.serializer.DefaultDeserializer;
 import org.springframework.core.serializer.DefaultSerializer;
-import org.springframework.integration.Message;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.ip.IpHeaders;
 import org.springframework.integration.ip.tcp.serializer.MapJsonSerializer;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.support.converter.MapMessageConverter;
+import org.springframework.messaging.Message;
 
 /**
  * @author Gary Russell
@@ -55,7 +57,7 @@ public class TcpMessageMapperTests {
 		when(connection.getHostName()).thenReturn("MyHost");
 		when(connection.getHostAddress()).thenReturn("1.1.1.1");
 		when(connection.getPort()).thenReturn(1234);
-		Message<Object> message = mapper.toMessage(connection);
+		Message<?> message = mapper.toMessage(connection);
 		assertEquals(TEST_PAYLOAD, new String((byte[]) message.getPayload()));
 		assertEquals("MyHost", message
 				.getHeaders().get(IpHeaders.HOSTNAME));
@@ -100,7 +102,7 @@ public class TcpMessageMapperTests {
 				return null;
 			}
 		};
-		Message<Object> message = mapper.toMessage(connection);
+		Message<?> message = mapper.toMessage(connection);
 		assertEquals(TEST_PAYLOAD, new String((byte[]) message.getPayload()));
 		assertEquals("MyHost", message
 				.getHeaders().get(IpHeaders.HOSTNAME));
@@ -108,7 +110,7 @@ public class TcpMessageMapperTests {
 				.getHeaders().get(IpHeaders.IP_ADDRESS));
 		assertEquals(1234, message
 				.getHeaders().get(IpHeaders.REMOTE_PORT));
-		assertEquals(Integer.valueOf(0), message.getHeaders().getSequenceNumber());
+		assertEquals(Integer.valueOf(0), new IntegrationMessageHeaderAccessor(message).getSequenceNumber());
 		message = mapper.toMessage(connection);
 		assertEquals(TEST_PAYLOAD, new String((byte[]) message.getPayload()));
 		assertEquals("MyHost", message
@@ -117,7 +119,7 @@ public class TcpMessageMapperTests {
 				.getHeaders().get(IpHeaders.IP_ADDRESS));
 		assertEquals(1234, message
 				.getHeaders().get(IpHeaders.REMOTE_PORT));
-		assertEquals(Integer.valueOf(0), message.getHeaders().getSequenceNumber());
+		assertEquals(Integer.valueOf(0), new IntegrationMessageHeaderAccessor(message).getSequenceNumber());
 	}
 
 	@Test
@@ -162,7 +164,7 @@ public class TcpMessageMapperTests {
 				return null;
 			}
 		};
-		Message<Object> message = mapper.toMessage(connection);
+		Message<?> message = mapper.toMessage(connection);
 		assertEquals(TEST_PAYLOAD, new String((byte[]) message.getPayload()));
 		assertEquals("MyHost", message
 				.getHeaders().get(IpHeaders.HOSTNAME));
@@ -170,11 +172,11 @@ public class TcpMessageMapperTests {
 				.getHeaders().get(IpHeaders.IP_ADDRESS));
 		assertEquals(1234, message
 				.getHeaders().get(IpHeaders.REMOTE_PORT));
-		assertEquals(Integer.valueOf(1), message
-				.getHeaders().getSequenceNumber());
-		assertEquals(message.getHeaders().get(IpHeaders.CONNECTION_ID), message
-				.getHeaders().getCorrelationId());
+		IntegrationMessageHeaderAccessor headerAccessor = new IntegrationMessageHeaderAccessor(message);
+		assertEquals(Integer.valueOf(1), headerAccessor.getSequenceNumber());
+		assertEquals(message.getHeaders().get(IpHeaders.CONNECTION_ID), headerAccessor.getCorrelationId());
 		message = mapper.toMessage(connection);
+		headerAccessor = new IntegrationMessageHeaderAccessor(message);
 		assertEquals(TEST_PAYLOAD, new String((byte[]) message.getPayload()));
 		assertEquals("MyHost", message
 				.getHeaders().get(IpHeaders.HOSTNAME));
@@ -182,10 +184,8 @@ public class TcpMessageMapperTests {
 				.getHeaders().get(IpHeaders.IP_ADDRESS));
 		assertEquals(1234, message
 				.getHeaders().get(IpHeaders.REMOTE_PORT));
-		assertEquals(Integer.valueOf(2), message
-				.getHeaders().getSequenceNumber());
-		assertEquals(message.getHeaders().get(IpHeaders.CONNECTION_ID), message
-				.getHeaders().getCorrelationId());
+		assertEquals(Integer.valueOf(2), headerAccessor.getSequenceNumber());
+		assertEquals(message.getHeaders().get(IpHeaders.CONNECTION_ID), headerAccessor.getCorrelationId());
 		assertNotNull(message.getHeaders().get("foo"));
 		assertEquals("bar", message.getHeaders().get("foo"));
 
@@ -280,5 +280,4 @@ public class TcpMessageMapperTests {
 		assertEquals(1234, message.getHeaders().get(IpHeaders.REMOTE_PORT));
 		assertEquals("someId", message.getHeaders().get(IpHeaders.CONNECTION_ID));
 	}
-
 }

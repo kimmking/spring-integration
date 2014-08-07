@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,7 @@
 
 package org.springframework.integration.gateway;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.core.MessagingTemplate;
-import org.springframework.integration.core.PollableChannel;
-import org.springframework.integration.core.SubscribableChannel;
 import org.springframework.integration.endpoint.AbstractEndpoint;
 import org.springframework.integration.endpoint.EventDrivenConsumer;
 import org.springframework.integration.endpoint.PollingConsumer;
@@ -30,9 +25,15 @@ import org.springframework.integration.history.HistoryWritingMessagePostProcesso
 import org.springframework.integration.history.TrackableComponent;
 import org.springframework.integration.mapping.InboundMessageMapper;
 import org.springframework.integration.mapping.OutboundMessageMapper;
-import org.springframework.integration.message.ErrorMessage;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
 import org.springframework.integration.support.converter.SimpleMessageConverter;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.SubscribableChannel;
+import org.springframework.messaging.support.ErrorMessage;
 import org.springframework.util.Assert;
 
 /**
@@ -43,6 +44,7 @@ import org.springframework.util.Assert;
  *
  * @author Mark Fisher
  * @author Gary Russell
+ * @author Artem Bilan
  */
 public abstract class MessagingGatewaySupport extends AbstractEndpoint implements TrackableComponent {
 
@@ -105,6 +107,8 @@ public abstract class MessagingGatewaySupport extends AbstractEndpoint implement
 	 * Set the error channel. If no error channel is provided, this gateway will
 	 * propagate Exceptions to the caller. To completely suppress Exceptions, provide
 	 * a reference to the "nullChannel" here.
+	 *
+	 * @param errorChannel The error channel.
 	 */
 	public void setErrorChannel(MessageChannel errorChannel) {
 		this.errorChannel = errorChannel;
@@ -134,6 +138,8 @@ public abstract class MessagingGatewaySupport extends AbstractEndpoint implement
 	/**
 	 * Provide an {@link InboundMessageMapper} for creating request Messages
 	 * from any object passed in a send or sendAndReceive operation.
+	 *
+	 * @param requestMapper The request mapper.
 	 */
 	public void setRequestMapper(InboundMessageMapper<?> requestMapper) {
 		requestMapper = (requestMapper != null) ? requestMapper : new DefaultRequestMapper();
@@ -144,6 +150,8 @@ public abstract class MessagingGatewaySupport extends AbstractEndpoint implement
 	/**
 	 * Provide an {@link OutboundMessageMapper} for mapping to objects from
 	 * any reply Messages received in receive or sendAndReceive operations.
+	 *
+	 * @param replyMapper The reply mapper.
 	 */
 	public void setReplyMapper(OutboundMessageMapper<?> replyMapper) {
 		this.messageConverter.setOutboundMessageMapper(replyMapper);
@@ -166,6 +174,14 @@ public abstract class MessagingGatewaySupport extends AbstractEndpoint implement
 	@Override
 	protected void onInit() throws Exception {
 		this.historyWritingPostProcessor.setTrackableComponent(this);
+		this.historyWritingPostProcessor.setMessageBuilderFactory(this.getMessageBuilderFactory());
+		if (this.getBeanFactory() != null) {
+			this.messagingTemplate.setBeanFactory(this.getBeanFactory());
+			if (this.requestMapper instanceof DefaultRequestMapper) {
+				((DefaultRequestMapper) this.requestMapper).setMessageBuilderFactory(this.getMessageBuilderFactory());
+			}
+			this.messageConverter.setBeanFactory(this.getBeanFactory());
+		}
 		this.initialized = true;
 	}
 
@@ -197,7 +213,7 @@ public abstract class MessagingGatewaySupport extends AbstractEndpoint implement
 		this.initializeIfNecessary();
 		Assert.state(this.replyChannel != null && (this.replyChannel instanceof PollableChannel),
 				"receive is not supported, because no pollable reply channel has been configured");
-		return this.messagingTemplate.receiveAndConvert((PollableChannel) this.replyChannel);
+		return this.messagingTemplate.receiveAndConvert((PollableChannel) this.replyChannel, null);
 	}
 
 	protected Object sendAndReceive(Object object) {
@@ -222,7 +238,7 @@ public abstract class MessagingGatewaySupport extends AbstractEndpoint implement
 		Throwable error = null;
 		try {
 			if (shouldConvert) {
-				reply = this.messagingTemplate.convertSendAndReceive(this.requestChannel, object, this.historyWritingPostProcessor);
+				reply = this.messagingTemplate.convertSendAndReceive(this.requestChannel, object, null, this.historyWritingPostProcessor);
 				if (reply instanceof Throwable) {
 					error = (Throwable) reply;
 				}
@@ -238,7 +254,9 @@ public abstract class MessagingGatewaySupport extends AbstractEndpoint implement
 			}
 		}
 		catch (Exception e) {
-			logger.warn("failure occurred in gateway sendAndReceive", e);
+			if (logger.isDebugEnabled()) {
+				logger.debug("failure occurred in gateway sendAndReceive: " + e.getMessage());
+			}
 			error = e;
 		}
 
@@ -325,12 +343,18 @@ public abstract class MessagingGatewaySupport extends AbstractEndpoint implement
 
 	private static class DefaultRequestMapper implements InboundMessageMapper<Object> {
 
+		private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
+		void setMessageBuilderFactory(MessageBuilderFactory messageBuilderFactory) {
+			this.messageBuilderFactory = messageBuilderFactory;
+		}
+
 		@Override
 		public Message<?> toMessage(Object object) throws Exception {
 			if (object instanceof Message<?>) {
 				return (Message<?>) object;
 			}
-			return (object != null) ? MessageBuilder.withPayload(object).build() : null;
+			return (object != null) ? this.messageBuilderFactory.withPayload(object).build() : null;
 		}
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,17 +20,18 @@ import javax.jms.Destination;
 import javax.jms.JMSException;
 
 import org.springframework.expression.Expression;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageDeliveryException;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.handler.AbstractMessageHandler;
 import org.springframework.integration.handler.ExpressionEvaluatingMessageProcessor;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.core.MessagePostProcessor;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.util.Assert;
 
 /**
  * A MessageConsumer that sends the converted Message payload within a JMS Message.
- * 
+ *
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  */
@@ -78,9 +79,11 @@ public class JmsSendingMessageHandler extends AbstractMessageHandler {
 	/**
 	 * Specify whether the payload should be extracted from each integration
 	 * Message to be used as the JMS Message body.
-	 * 
+	 *
 	 * <p>The default value is <code>true</code>. To force passing of the full
 	 * Spring Integration Message instead, set this to <code>false</code>.
+	 *
+	 * @param extractPayload true to extract the payload.
 	 */
 	public void setExtractPayload(boolean extractPayload) {
 		this.extractPayload = extractPayload;
@@ -108,7 +111,7 @@ public class JmsSendingMessageHandler extends AbstractMessageHandler {
 		Object objectToSend = (this.extractPayload) ? message.getPayload() : message;
 		MessagePostProcessor messagePostProcessor = new HeaderMappingMessagePostProcessor(message, this.headerMapper);
 		try {
-			DynamicJmsTemplateProperties.setPriority(message.getHeaders().getPriority());
+			DynamicJmsTemplateProperties.setPriority(new IntegrationMessageHeaderAccessor(message).getPriority());
 			this.send(destination, objectToSend, messagePostProcessor);
 		}
 		finally {
@@ -158,6 +161,7 @@ public class JmsSendingMessageHandler extends AbstractMessageHandler {
 			this.headerMapper = headerMapper;
 		}
 
+		@Override
 		public javax.jms.Message postProcessMessage(javax.jms.Message jmsMessage) throws JMSException {
 			this.headerMapper.fromHeaders(this.integrationMessage.getHeaders(), jmsMessage);
 			return jmsMessage;

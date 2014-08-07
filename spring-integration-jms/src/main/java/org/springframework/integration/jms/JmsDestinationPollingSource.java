@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,13 +20,14 @@ import java.util.Map;
 
 import javax.jms.Destination;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.context.IntegrationObjectSupport;
 import org.springframework.integration.core.MessageSource;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.jms.util.JmsAdapterUtils;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.support.converter.MessageConverter;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
@@ -34,11 +35,12 @@ import org.springframework.util.Assert;
  * only recommended for very low message volume. Otherwise, the
  * {@link JmsMessageDrivenEndpoint} that uses Spring's MessageListener container
  * support is a better option.
- * 
+ *
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  */
 public class JmsDestinationPollingSource extends IntegrationObjectSupport implements MessageSource<Object> {
+
 
 	private final JmsTemplate jmsTemplate;
 
@@ -50,11 +52,11 @@ public class JmsDestinationPollingSource extends IntegrationObjectSupport implem
 
 	private volatile JmsHeaderMapper headerMapper = new DefaultJmsHeaderMapper();
 
+	private volatile String sessionAcknowledgeMode;
 
 	public JmsDestinationPollingSource(JmsTemplate jmsTemplate) {
 		this.jmsTemplate = jmsTemplate;
 	}
-
 
 	public void setDestination(Destination destination) {
 		Assert.isNull(this.destinationName, "The 'destination' and 'destinationName' properties are mutually exclusive.");
@@ -73,6 +75,8 @@ public class JmsDestinationPollingSource extends IntegrationObjectSupport implem
 
 	/**
 	 * Specify a JMS Message Selector expression to use when receiving Messages.
+	 *
+	 * @param messageSelector The message selector.
 	 */
 	public void setMessageSelector(String messageSelector) {
 		this.messageSelector = messageSelector;
@@ -82,11 +86,16 @@ public class JmsDestinationPollingSource extends IntegrationObjectSupport implem
 		this.headerMapper = headerMapper;
 	}
 
+	public void setSessionAcknowledgeMode(String sessionAcknowledgeMode) {
+		this.sessionAcknowledgeMode = sessionAcknowledgeMode;
+	}
+
 	/**
-	 * Will receive a JMS {@link javax.jms.Message} converting and returning it as 
+	 * Will receive a JMS {@link javax.jms.Message} converting and returning it as
 	 * a Spring Integration {@link Message}. This method will also use the current
 	 * {@link JmsHeaderMapper} instance to map JMS properties to the MessageHeaders.
 	 */
+	@Override
 	@SuppressWarnings("unchecked")
 	public Message<Object> receive() {
 		Message<Object> convertedMessage = null;
@@ -99,8 +108,9 @@ public class JmsDestinationPollingSource extends IntegrationObjectSupport implem
 			Map<String, Object> mappedHeaders = this.headerMapper.toHeaders(jmsMessage);
 			MessageConverter converter = this.jmsTemplate.getMessageConverter();
 			Object convertedObject = converter.fromMessage(jmsMessage);
-			MessageBuilder<Object> builder = (convertedObject instanceof Message)
-					? MessageBuilder.fromMessage((Message<Object>) convertedObject) : MessageBuilder.withPayload(convertedObject);
+			AbstractIntegrationMessageBuilder<Object> builder = (convertedObject instanceof Message) ?
+					this.getMessageBuilderFactory().fromMessage((Message<Object>) convertedObject) :
+					this.getMessageBuilderFactory().withPayload(convertedObject);
 			convertedMessage = builder.copyHeadersIfAbsent(mappedHeaders).build();
 		}
 		catch (Exception e) {
@@ -121,6 +131,21 @@ public class JmsDestinationPollingSource extends IntegrationObjectSupport implem
 			jmsMessage = this.jmsTemplate.receiveSelected(this.messageSelector);
 		}
 		return jmsMessage;
+	}
+
+	@Override
+	protected void onInit() {
+		if (this.sessionAcknowledgeMode != null) {
+			Integer acknowledgeMode = JmsAdapterUtils.parseAcknowledgeMode(this.sessionAcknowledgeMode);
+			if (acknowledgeMode != null) {
+				if (JmsAdapterUtils.SESSION_TRANSACTED == acknowledgeMode) {
+					this.jmsTemplate.setSessionTransacted(true);
+				}
+				else {
+					this.jmsTemplate.setSessionAcknowledgeMode(acknowledgeMode);
+				}
+			}
+		}
 	}
 
 }

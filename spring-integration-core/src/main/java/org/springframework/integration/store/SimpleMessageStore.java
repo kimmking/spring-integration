@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -21,13 +21,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.Lock;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.util.DefaultLockRegistry;
-import org.springframework.integration.util.LockRegistry;
+import org.springframework.integration.support.locks.DefaultLockRegistry;
+import org.springframework.integration.support.locks.LockRegistry;
 import org.springframework.integration.util.UpperBound;
 import org.springframework.jmx.export.annotation.ManagedAttribute;
-import org.springframework.jmx.export.annotation.ManagedResource;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 
@@ -43,8 +42,8 @@ import org.springframework.util.CollectionUtils;
  *
  * @since 2.0
  */
-@ManagedResource
-public class SimpleMessageStore extends AbstractMessageGroupStore implements MessageStore, MessageGroupStore {
+public class SimpleMessageStore extends AbstractMessageGroupStore
+		implements MessageStore, ChannelMessageStore {
 
 	private volatile LockRegistry lockRegistry;
 
@@ -58,12 +57,17 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 
 	private volatile boolean isUsed;
 
+	private volatile boolean copyOnGet = false;
+
 	/**
 	 * Creates a SimpleMessageStore with a maximum size limited by the given capacity, or unlimited size if the given
 	 * capacity is less than 1. The capacities are applied independently to messages stored via
 	 * {@link #addMessage(Message)} and to those stored via {@link #addMessageToGroup(Object, Message)}. In both cases
 	 * the capacity applies to the number of messages that can be stored, and once that limit is reached attempting to
 	 * store another will result in an exception.
+	 *
+	 * @param individualCapacity The message capacity.
+	 * @param groupCapacity The capacity of each group.
 	 */
 	public SimpleMessageStore(int individualCapacity, int groupCapacity) {
 		this(individualCapacity, groupCapacity, new DefaultLockRegistry());
@@ -73,6 +77,10 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 	 * See {@link #SimpleMessageStore(int, int)}.
 	 * Also allows the provision of a custom {@link LockRegistry}
 	 * rather than using the default.
+	 *
+	 * @param individualCapacity The message capacity.
+	 * @param groupCapacity The capacity of each group.
+	 * @param lockRegistry The lock registry.
 	 */
 	public SimpleMessageStore(int individualCapacity, int groupCapacity, LockRegistry lockRegistry) {
 		Assert.notNull(lockRegistry, "The LockRegistry cannot be null");
@@ -85,6 +93,8 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 
 	/**
 	 * Creates a SimpleMessageStore with the same capacity for individual and grouped messages.
+	 *
+	 * @param capacity The capacity.
 	 */
 	public SimpleMessageStore(int capacity) {
 		this(capacity, capacity);
@@ -97,17 +107,44 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		this(0);
 	}
 
+	/**
+	 * Factory method to return a simple message store that does not
+	 * copy the group in {@link #getMessageGroup(Object)}.
+	 * @param capacity the capacity (0 for unlimited).
+	 * @return the store.
+	 * @since 4.0.1
+	 * @deprecated in 4.1 - copyOnGet is now false by default.
+	 */
+	@Deprecated
+	public static SimpleMessageStore fastMessageStore(int capacity) {
+		SimpleMessageStore store = new SimpleMessageStore(capacity);
+		store.setCopyOnGet(false);
+		return store;
+	}
+
+	/**
+	 * Set to false to disable copying the group in {@link #getMessageGroup(Object)}.
+	 * Starting with 4.1, this is false by default.
+	 * @param copyOnGet True to copy, false to not.
+	 * @since 4.0.1
+	 */
+	public void setCopyOnGet(boolean copyOnGet) {
+		this.copyOnGet = copyOnGet;
+	}
+
 	public void setLockRegistry(LockRegistry lockRegistry) {
 		Assert.notNull(lockRegistry, "The LockRegistry cannot be null");
 		Assert.isTrue(!(this.isUsed), "Cannot change the lock registry after the store has been used");
 		this.lockRegistry = lockRegistry;
 	}
 
+	@Override
 	@ManagedAttribute
 	public long getMessageCount() {
 		return idToMessage.size();
 	}
 
+	@Override
 	public <T> Message<T> addMessage(Message<T> message) {
 		this.isUsed = true;
 		if (!individualUpperBound.tryAcquire(0)) {
@@ -118,19 +155,23 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		return message;
 	}
 
+	@Override
 	public Message<?> getMessage(UUID key) {
 		return (key != null) ? this.idToMessage.get(key) : null;
 	}
 
+	@Override
 	public Message<?> removeMessage(UUID key) {
 		if (key != null) {
 			individualUpperBound.release();
 			return this.idToMessage.remove(key);
 		}
-		else
+		else {
 			return null;
+		}
 	}
 
+	@Override
 	public MessageGroup getMessageGroup(Object groupId) {
 		Assert.notNull(groupId, "'groupId' must not be null");
 
@@ -138,11 +179,22 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		if (group == null) {
 			return new SimpleMessageGroup(groupId);
 		}
+		if (this.copyOnGet) {
+			return copy(group);
+		}
+		else {
+			return group;
+		}
+	}
+
+	@Override
+	protected MessageGroup copy(MessageGroup group) {
 		SimpleMessageGroup simpleMessageGroup = new SimpleMessageGroup(group);
 		simpleMessageGroup.setLastModified(group.getLastModified());
 		return simpleMessageGroup;
 	}
 
+	@Override
 	public MessageGroup addMessageToGroup(Object groupId, Message<?> message) {
 		if (!groupUpperBound.tryAcquire(0)) {
 			throw new MessagingException(this.getClass().getSimpleName()
@@ -171,6 +223,7 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		}
 	}
 
+	@Override
 	public void removeMessageGroup(Object groupId) {
 		Lock lock = this.lockRegistry.obtain(groupId);
 		try {
@@ -193,6 +246,7 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		}
 	}
 
+	@Override
 	public MessageGroup removeMessageFromGroup(Object groupId, Message<?> messageToRemove) {
 		Lock lock = this.lockRegistry.obtain(groupId);
 		try {
@@ -215,10 +269,12 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		}
 	}
 
+	@Override
 	public Iterator<MessageGroup> iterator() {
 		return new HashSet<MessageGroup>(groupIdToMessageGroup.values()).iterator();
 	}
 
+	@Override
 	public void setLastReleasedSequenceNumberForGroup(Object groupId, int sequenceNumber) {
 		Lock lock = this.lockRegistry.obtain(groupId);
 		try {
@@ -240,6 +296,7 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		}
 	}
 
+	@Override
 	public void completeGroup(Object groupId) {
 		Lock lock = this.lockRegistry.obtain(groupId);
 		try {
@@ -261,6 +318,7 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		}
 	}
 
+	@Override
 	public Message<?> pollMessageFromGroup(Object groupId) {
 		Collection<Message<?>> messageList = this.getMessageGroup(groupId).getMessages();
 		Message<?> message = null;
@@ -273,7 +331,19 @@ public class SimpleMessageStore extends AbstractMessageGroupStore implements Mes
 		return message;
 	}
 
+	@Override
 	public int messageGroupSize(Object groupId) {
 		return this.getMessageGroup(groupId).size();
 	}
+
+	@Override
+	public MessageGroupMetadata getGroupMetadata(Object groupId) {
+		return new MessageGroupMetadata(this.getMessageGroup(groupId));
+	}
+
+	@Override
+	public Message<?> getOneMessageFromGroup(Object groupId) {
+		return this.getMessageGroup(groupId).getOne();
+	}
+
 }

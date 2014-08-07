@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -81,7 +81,7 @@ public class ExpressionEvaluatingSqlParameterSourceFactory extends AbstractExpre
 	 * context: generally in an outbound setting it is a Message, and in an inbound setting it is a result set row (a
 	 * Map or a domain object if a RowMapper has been provided). The {@link #setStaticParameters(Map) static parameters}
 	 * can be referred to in an expression using the variable <code>#staticParameters</code>, for example:
-	 * <p>
+	 * <p>&nbsp;
 	 * <table>
 	 * <caption>Parameter Expressions Samples</caption>
 	 * <tr>
@@ -123,8 +123,20 @@ public class ExpressionEvaluatingSqlParameterSourceFactory extends AbstractExpre
 		this.parameterExpressions = paramExpressions;
 	}
 
+	@Override
 	public SqlParameterSource createParameterSource(final Object input) {
-		return new ExpressionEvaluatingSqlParameterSource(input, this.staticParameters, this.parameterExpressions);
+		return new ExpressionEvaluatingSqlParameterSource(input, this.staticParameters, this.parameterExpressions, true);
+	}
+
+	/**
+	 * Create an expression evaluating {@link SqlParameterSource} that does not cache it's results. Useful for cases
+	 * where the source is used multiple times, for example in a {@code <int-jdbc:inbound-channel-adapter/>} for the
+	 * {@code select-sql-parameter-source} attribute.
+	 * @param input The root object for the evaluation.
+	 * @return The parameter source.
+	 */
+	public SqlParameterSource createParameterSourceNoCache(final Object input) {
+		return new ExpressionEvaluatingSqlParameterSource(input, this.staticParameters, this.parameterExpressions, false);
 	}
 
 	@Override
@@ -137,20 +149,32 @@ public class ExpressionEvaluatingSqlParameterSourceFactory extends AbstractExpre
 
 		private final Object input;
 
-		private volatile Map<String, Object> values = new HashMap<String, Object>();
+		private final Map<String, Object> values = new HashMap<String, Object>();
 
 		private final Map<String, Expression[]> parameterExpressions;
 
+		private final boolean cache;
+
 		private ExpressionEvaluatingSqlParameterSource(Object input, Map<String, ?> staticParameters,
-				Map<String, Expression[]> parameterExpressions) {
+				Map<String, Expression[]> parameterExpressions, boolean cache) {
 			this.input = input;
 			this.parameterExpressions = parameterExpressions;
 			this.values.putAll(staticParameters);
+			this.cache = cache;
 		}
 
+		@Override
 		public Object getValue(String paramName) throws IllegalArgumentException {
+			return this.doGetValue(paramName, false);
+		}
+
+		public Object doGetValue(String paramName, boolean calledFromHasValue) throws IllegalArgumentException {
 			if (values.containsKey(paramName)) {
-				return values.get(paramName);
+				Object cachedByHasValue = values.get(paramName);
+				if (!this.cache) {
+					values.remove(paramName);
+				}
+				return cachedByHasValue;
 			}
 
 			if (!parameterExpressions.containsKey(paramName)) {
@@ -172,16 +196,19 @@ public class ExpressionEvaluatingSqlParameterSourceFactory extends AbstractExpre
 			}
 
 			Object value = evaluateExpression(expression, input);
-			values.put(paramName, value);
+			if (this.cache || calledFromHasValue) {
+				values.put(paramName, value);
+			}
 			if (logger.isDebugEnabled()) {
 				logger.debug("Resolved expression " + expression + " to " + value);
 			}
 			return value;
 		}
 
+		@Override
 		public boolean hasValue(String paramName) {
 			try {
-				Object value = getValue(paramName);
+				Object value = doGetValue(paramName, true);
 				if (value == ERROR) {
 					return false;
 				}
@@ -190,7 +217,9 @@ public class ExpressionEvaluatingSqlParameterSourceFactory extends AbstractExpre
 				if (logger.isDebugEnabled()) {
 					logger.debug("Could not evaluate expression", e);
 				}
-				values.put(paramName, ERROR);
+				if (this.cache) {
+					values.put(paramName, ERROR);
+				}
 				return false;
 			}
 			return true;

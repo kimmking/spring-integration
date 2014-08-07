@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,21 +16,21 @@
 
 package org.springframework.integration.event.inbound;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
-import org.springframework.context.event.ApplicationContextEvent;
 import org.springframework.context.event.ApplicationEventMulticaster;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.ContextStoppedEvent;
 import org.springframework.context.event.SmartApplicationListener;
 import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.core.Ordered;
-import org.springframework.integration.Message;
 import org.springframework.integration.endpoint.ExpressionMessageProducerSupport;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
 import org.springframework.util.Assert;
-import org.springframework.util.CollectionUtils;
 
 /**
  * An inbound Channel Adapter that implements {@link ApplicationListener} and
@@ -40,16 +40,21 @@ import org.springframework.util.CollectionUtils;
  *
  * @author Mark Fisher
  * @author Artem Bilan
+ * @author Gary Russell
+ *
  * @see ApplicationEventMulticaster
  * @see ExpressionMessageProducerSupport
  */
-public class ApplicationEventListeningMessageProducer extends ExpressionMessageProducerSupport implements SmartApplicationListener {
+public class ApplicationEventListeningMessageProducer extends ExpressionMessageProducerSupport
+		implements SmartApplicationListener {
 
 	private volatile Set<Class<? extends ApplicationEvent>> eventTypes;
 
 	private ApplicationEventMulticaster applicationEventMulticaster;
 
 	private volatile boolean active;
+
+	private volatile long stoppedAt;
 
 	/**
 	 * Set the list of event types (classes that extend ApplicationEvent) that
@@ -59,12 +64,14 @@ public class ApplicationEventListeningMessageProducer extends ExpressionMessageP
 	 * with the {@link ApplicationEventMulticaster} which clears the listener cache. The cache will be
 	 * refreshed on the next appropriate {@link ApplicationEvent}.
 	 *
+	 * @param eventTypes The event types.
+	 *
 	 * @see ApplicationEventMulticaster#addApplicationListener
 	 * @see #supportsEventType
 	 */
-	@SuppressWarnings("unchecked")
 	public void setEventTypes(Class<? extends ApplicationEvent>... eventTypes) {
-		Set<Class<? extends ApplicationEvent>> eventSet = new HashSet<Class<? extends ApplicationEvent>>(CollectionUtils.arrayToList(eventTypes));
+		Set<Class<? extends ApplicationEvent>> eventSet = new HashSet<Class<? extends ApplicationEvent>>(
+				Arrays.asList(eventTypes));
 		eventSet.remove(null);
 		this.eventTypes = (eventSet.size() > 0 ? eventSet : null);
 
@@ -82,23 +89,32 @@ public class ApplicationEventListeningMessageProducer extends ExpressionMessageP
 	protected void onInit() {
 		super.onInit();
 		this.applicationEventMulticaster = this.getBeanFactory()
-				.getBean(AbstractApplicationContext.APPLICATION_EVENT_MULTICASTER_BEAN_NAME, ApplicationEventMulticaster.class);
+				.getBean(AbstractApplicationContext.APPLICATION_EVENT_MULTICASTER_BEAN_NAME,
+						ApplicationEventMulticaster.class);
 		Assert.notNull(this.applicationEventMulticaster,
-				"To use ApplicationListeners the 'applicationEventMulticaster' bean must be supplied within ApplicationContext.");
+				"To use ApplicationListeners the 'applicationEventMulticaster' " +
+						"bean must be supplied within ApplicationContext.");
 	}
 
+	@Override
 	public void onApplicationEvent(ApplicationEvent event) {
-		if (this.active || event instanceof ApplicationContextEvent) {
+		if (this.active || ((event instanceof ContextStoppedEvent || event instanceof ContextClosedEvent)
+								&& this.stoppedRecently())) {
 			if (event.getSource() instanceof Message<?>) {
 				this.sendMessage((Message<?>) event.getSource());
 			}
 			else {
 				Object payload = this.evaluatePayloadExpression(event);
-				this.sendMessage(MessageBuilder.withPayload(payload).build());
+				this.sendMessage(this.getMessageBuilderFactory().withPayload(payload).build());
 			}
 		}
 	}
 
+	private boolean stoppedRecently() {
+		return this.stoppedAt > System.currentTimeMillis() - 5000;
+	}
+
+	@Override
 	public boolean supportsEventType(Class<? extends ApplicationEvent> eventType) {
 		if (this.eventTypes == null) {
 			return true;
@@ -111,10 +127,12 @@ public class ApplicationEventListeningMessageProducer extends ExpressionMessageP
 		return false;
 	}
 
+	@Override
 	public boolean supportsSourceType(Class<?> sourceType) {
 		return true;
 	}
 
+	@Override
 	public int getOrder() {
 		return Ordered.LOWEST_PRECEDENCE;
 	}
@@ -126,6 +144,7 @@ public class ApplicationEventListeningMessageProducer extends ExpressionMessageP
 
 	@Override
 	protected void doStop() {
+		this.stoppedAt = System.currentTimeMillis();
 		this.active = false;
 	}
 

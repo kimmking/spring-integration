@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.management.InstanceNotFoundException;
 import javax.management.ListenerNotFoundException;
@@ -34,9 +35,12 @@ import javax.management.ObjectName;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.springframework.integration.Message;
+
+import org.springframework.context.ApplicationListener;
+import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.integration.endpoint.MessageProducerSupport;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.messaging.Message;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
 
@@ -46,11 +50,15 @@ import org.springframework.util.ObjectUtils;
  *
  * @author Mark Fisher
  * @author Gary Russell
+ * @author Artem Bilan
  * @since 2.0
  */
-public class NotificationListeningMessageProducer extends MessageProducerSupport implements NotificationListener {
+public class NotificationListeningMessageProducer extends MessageProducerSupport
+		implements NotificationListener, ApplicationListener<ContextRefreshedEvent> {
 
 	private final Log logger = LogFactory.getLog(this.getClass());
+
+	private final AtomicBoolean listenerRegisteredOnStartup = new AtomicBoolean();
 
 	private volatile MBeanServerConnection server;
 
@@ -64,6 +72,8 @@ public class NotificationListeningMessageProducer extends MessageProducerSupport
 	/**
 	 * Provide a reference to the MBeanServer where the notification
 	 * publishing MBeans are registered.
+	 *
+	 * @param server the MBean server connection.
 	 */
 	public void setServer(MBeanServerConnection server) {
 		this.server = server;
@@ -73,6 +83,8 @@ public class NotificationListeningMessageProducer extends MessageProducerSupport
 	 * Specify the JMX ObjectNames (or patterns)
 	 * of the notification publisher
 	 * to which this notification listener should be subscribed.
+	 *
+	 * @param objectNames The object names.
 	 */
 	public void setObjectName(ObjectName... objectNames) {
 		Assert.isTrue(!ObjectUtils.isEmpty(objectNames), "'objectNames' must contain at least one ObjectName");
@@ -82,6 +94,8 @@ public class NotificationListeningMessageProducer extends MessageProducerSupport
 	/**
 	 * Specify a {@link NotificationFilter} to be passed to the server
 	 * when registering this listener. The filter may be null.
+	 *
+	 * @param filter The filter.
 	 */
 	public void setFilter(NotificationFilter filter) {
 		this.filter = filter;
@@ -90,6 +104,8 @@ public class NotificationListeningMessageProducer extends MessageProducerSupport
 	/**
 	 * Specify a handback object to provide context to the listener
 	 * upon notification. This object may be null.
+	 *
+	 * @param handback The object.
 	 */
 	public void setHandback(Object handback) {
 		this.handback = handback;
@@ -101,11 +117,12 @@ public class NotificationListeningMessageProducer extends MessageProducerSupport
 	 * not null, it sets that as a Message header value. The Message is then
 	 * sent to this producer's output channel.
 	 */
+	@Override
 	public void handleNotification(Notification notification, Object handback) {
 		if (logger.isInfoEnabled()) {
 			logger.info("received notification: " + notification + ", and handback: " + handback);
 		}
-		MessageBuilder<?> builder = MessageBuilder.withPayload(notification);
+		AbstractIntegrationMessageBuilder<?> builder = this.getMessageBuilderFactory().withPayload(notification);
 		if (handback != null) {
 			builder.setHeader(JmxHeaders.NOTIFICATION_HANDBACK, handback);
 		}
@@ -119,10 +136,25 @@ public class NotificationListeningMessageProducer extends MessageProducerSupport
 	}
 
 	/**
+	 * The {@link NotificationListener} might not be registered on {@link #start()}
+	 * because the {@code MBeanExporter} might not been started yet.
+	 * @param event the ContextRefreshedEvent event
+	 */
+	@Override
+	public void onApplicationEvent(ContextRefreshedEvent event) {
+		if (!this.listenerRegisteredOnStartup.getAndSet(true) && isAutoStartup()) {
+			 doStart();
+		}
+	}
+
+	/**
 	 * Registers the notification listener with the specified ObjectNames.
 	 */
 	@Override
 	protected void doStart() {
+		if (!this.listenerRegisteredOnStartup.get()) {
+			return;
+		}
 		logger.debug("Registering to receive notifications");
 		try {
 			Assert.notNull(this.server, "MBeanServer is required.");
@@ -191,4 +223,5 @@ public class NotificationListeningMessageProducer extends MessageProducerSupport
 		}
 		return objectNames;
 	}
+
 }

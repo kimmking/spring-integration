@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import java.util.List;
 
 import org.jivesoftware.smack.XMPPConnection;
+import org.jivesoftware.smackx.jiveproperties.JivePropertiesManager;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -31,15 +32,15 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.core.MessageHandler;
-import org.springframework.integration.core.SubscribableChannel;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.SubscribableChannel;
 import org.springframework.integration.endpoint.EventDrivenConsumer;
 import org.springframework.integration.endpoint.PollingConsumer;
 import org.springframework.integration.handler.advice.AbstractRequestHandlerAdvice;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.integration.xmpp.XmppHeaders;
@@ -53,6 +54,7 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
  * @author Mark Fisher
  * @author Artem Bilan
  * @author Gunnar Hillert
+ * @author Florian Schmaus
  */
 @ContextConfiguration
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -117,7 +119,7 @@ public class ChatMessageOutboundChannelAdapterParserTests {
 		          Object[] args = invocation.getArguments();
 		          org.jivesoftware.smack.packet.Message xmppMessage = (org.jivesoftware.smack.packet.Message) args[0];
 		          assertEquals("oleg", xmppMessage.getTo());
-		          assertEquals("foobar", xmppMessage.getProperty("foobar"));
+		          assertEquals("foobar", JivePropertiesManager.getProperty(xmppMessage, "foobar"));
 		          return null;
 		      }})
 		  .when(connection).sendPacket(Mockito.any(org.jivesoftware.smack.packet.Message.class));

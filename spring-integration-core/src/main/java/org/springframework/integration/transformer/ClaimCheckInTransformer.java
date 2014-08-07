@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,15 @@
 
 package org.springframework.integration.transformer;
 
-import org.springframework.integration.Message;
 import org.springframework.integration.store.MessageStore;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.messaging.Message;
 import org.springframework.util.Assert;
 
 /**
  * Transformer that stores a Message and returns a new Message whose payload
  * is the id of the stored Message.
- * 
+ *
  * @author Mark Fisher
  * @since 2.0
  */
@@ -35,12 +35,18 @@ public class ClaimCheckInTransformer extends AbstractTransformer {
 
 	/**
 	 * Create a claim check-in transformer that will delegate to the provided MessageStore.
+	 *
+	 * @param messageStore The message store.
 	 */
 	public ClaimCheckInTransformer(MessageStore messageStore) {
 		Assert.notNull(messageStore, "MessageStore must not be null");
 		this.messageStore = messageStore;
 	}
 
+	@Override
+	public String getComponentType() {
+		return "claim-check-in";
+	}
 
 	@Override
 	protected Object doTransform(Message<?> message) throws Exception {
@@ -48,7 +54,7 @@ public class ClaimCheckInTransformer extends AbstractTransformer {
 		Object payload = message.getPayload();
 		Assert.notNull(payload, "payload must not be null");
 		Message<?> storedMessage = this.messageStore.addMessage(message);
-		MessageBuilder<?> responseBuilder = MessageBuilder.withPayload(storedMessage.getHeaders().getId());
+		AbstractIntegrationMessageBuilder<?> responseBuilder = this.getMessageBuilderFactory().withPayload(storedMessage.getHeaders().getId());
 		// headers on the 'current' message take precedence
 		responseBuilder.copyHeaders(message.getHeaders());
 		return responseBuilder.build();

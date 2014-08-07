@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,14 @@ package org.springframework.integration.handler.advice;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessagingException;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessagingException;
 import org.springframework.integration.core.MessagingTemplate;
-import org.springframework.integration.message.ErrorMessage;
+import org.springframework.messaging.support.ErrorMessage;
 import org.springframework.retry.RecoveryCallback;
 import org.springframework.retry.RetryContext;
 import org.springframework.util.Assert;
@@ -36,19 +39,27 @@ import org.springframework.util.Assert;
  * @since 2.2
  *
  */
-public class ErrorMessageSendingRecoverer implements RecoveryCallback<Object> {
+public class ErrorMessageSendingRecoverer implements RecoveryCallback<Object>, BeanFactoryAware {
 
 	private final static Log logger = LogFactory.getLog(ErrorMessageSendingRecoverer.class);
 
 	private final MessagingTemplate messagingTemplate = new MessagingTemplate();
 
+	private BeanFactory beanFactory;
+
 	public ErrorMessageSendingRecoverer(MessageChannel channel) {
 		Assert.notNull(channel, "channel cannot be null");
-		this.messagingTemplate.setDefaultChannel(channel);
+		this.messagingTemplate.setDefaultDestination(channel);
 	}
 
 	public void setSendTimeout(long sendTimeout) {
 		this.messagingTemplate.setSendTimeout(sendTimeout);
+	}
+
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+		this.beanFactory = beanFactory;
+		this.messagingTemplate.setBeanFactory(beanFactory);
 	}
 
 	public Object recover(RetryContext context) throws Exception {

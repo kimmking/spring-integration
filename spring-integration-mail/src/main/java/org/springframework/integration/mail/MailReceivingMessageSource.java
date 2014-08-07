@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,10 +22,17 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
+
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
+import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.integration.core.MessageSource;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.context.NamedComponent;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
@@ -38,7 +45,8 @@ import org.springframework.util.Assert;
  * @author Gary Russell
  * @author Oleg Zhurakousky
  */
-public class MailReceivingMessageSource implements MessageSource<javax.mail.Message> {
+public class MailReceivingMessageSource implements MessageSource<javax.mail.Message>,
+		BeanFactoryAware, BeanNameAware, NamedComponent {
 
 	private final Log logger = LogFactory.getLog(this.getClass());
 
@@ -46,12 +54,48 @@ public class MailReceivingMessageSource implements MessageSource<javax.mail.Mess
 
 	private final Queue<javax.mail.Message> mailQueue = new ConcurrentLinkedQueue<javax.mail.Message>();
 
+	private volatile BeanFactory beanFactory;
+
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
+	private volatile String beanName;
+
 
 	public MailReceivingMessageSource(MailReceiver mailReceiver) {
 		Assert.notNull(mailReceiver, "mailReceiver must not be null");
 		this.mailReceiver = mailReceiver;
 	}
 
+	@Override
+	public final void setBeanFactory(BeanFactory beanFactory) {
+		this.beanFactory = beanFactory;
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(this.beanFactory);
+	}
+
+	protected BeanFactory getBeanFactory() {
+		return beanFactory;
+	}
+
+	protected MessageBuilderFactory getMessageBuilderFactory() {
+		return messageBuilderFactory;
+	}
+
+	@Override
+	public String getComponentName() {
+		return this.beanName;
+	}
+
+	@Override
+	public String getComponentType() {
+		return "mail:inbound-channel-adapter";
+	}
+
+	@Override
+	public void setBeanName(String name) {
+		this.beanName = name;
+	}
+
+	@Override
 	public Message<javax.mail.Message> receive() {
 		try {
 			javax.mail.Message mailMessage = this.mailQueue.poll();
@@ -66,7 +110,7 @@ public class MailReceivingMessageSource implements MessageSource<javax.mail.Mess
 				if (logger.isDebugEnabled()) {
 					logger.debug("received mail message [" + mailMessage + "]");
 				}
-				return MessageBuilder.withPayload(mailMessage).build();
+				return this.messageBuilderFactory.withPayload(mailMessage).build();
 			}
 		}
 		catch (Exception e) {

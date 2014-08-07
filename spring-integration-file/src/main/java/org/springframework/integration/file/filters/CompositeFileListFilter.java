@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,12 +28,14 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.util.Assert;
 
 /**
- * Simple {@link FileListFilter} that predicates its matches against any of many
+ * Simple {@link FileListFilter} that predicates its matches against <b>all</b> of the
  * configured {@link FileListFilter}.
  *
  * @author Iwein Fuld
  * @author Josh Long
- * @param <F>
+ * @author Gary Russell
+ *
+ * @param <F> The type that will be filtered.
  */
 public class CompositeFileListFilter<F> implements FileListFilter<F> {
 
@@ -87,6 +89,7 @@ public class CompositeFileListFilter<F> implements FileListFilter<F> {
 	}
 
 
+	@Override
 	public List<F> filterFiles(F[] files) {
 		Assert.notNull(files, "'files' should not be null");
 		List<F> results = new ArrayList<F>(Arrays.asList(files));

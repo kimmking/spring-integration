@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.text.DateFormat;
 import java.text.MessageFormat;
-import java.text.SimpleDateFormat;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -30,9 +30,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.Locale;
 import java.util.TimeZone;
 
 import org.apache.commons.logging.Log;
@@ -47,9 +47,9 @@ import org.springframework.core.convert.TypeDescriptor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.integration.MessageHeaders;
-import org.springframework.integration.context.IntegrationContextUtils;
 import org.springframework.integration.mapping.HeaderMapper;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
@@ -211,6 +211,7 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 			AGE,
 			ALLOW,
 			CACHE_CONTROL,
+			CONNECTION,
 			CONTENT_ENCODING,
 			CONTENT_LANGUAGE,
 			CONTENT_LENGTH,
@@ -265,6 +266,7 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 
 	private volatile String userDefinedHeaderPrefix = "X-";
 
+	@Override
 	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
 		this.beanFactory = beanFactory;
 	}
@@ -276,6 +278,8 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 	 * <p>
 	 * Any non-standard headers will be prefixed with the value specified by
 	 * {@link DefaultHttpHeaderMapper#setUserDefinedHeaderPrefix(String)}. The default is 'X-'.
+	 *
+	 * @param outboundHeaderNames The outbound header names.
 	 */
 	public void setOutboundHeaderNames(String[] outboundHeaderNames) {
 		this.outboundHeaderNames = (outboundHeaderNames != null) ? outboundHeaderNames : new String[0];
@@ -289,6 +293,8 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 	 * This will match the header name directly or, for non-standard HTTP headers, it will match
 	 * the header name prefixed with the value specified by
 	 * {@link DefaultHttpHeaderMapper#setUserDefinedHeaderPrefix(String)}. The default is 'X-'.
+	 *
+	 * @param inboundHeaderNames The inbound header names.
 	 */
 	public void setInboundHeaderNames(String[] inboundHeaderNames) {
 		this.inboundHeaderNames = (inboundHeaderNames != null) ? inboundHeaderNames : new String[0];
@@ -316,6 +322,8 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 
 	/**
 	 * Sets the prefix to use with user-defined (non-standard) headers. Default is 'X-'.
+	 *
+	 * @param userDefinedHeaderPrefix The user defined header prefix.
 	 */
 	public void setUserDefinedHeaderPrefix(String userDefinedHeaderPrefix) {
 		this.userDefinedHeaderPrefix = (userDefinedHeaderPrefix != null) ? userDefinedHeaderPrefix : "";
@@ -326,6 +334,7 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 	 * Depending on which type of adapter is using this mapper, the HttpHeaders might be
 	 * for an HTTP request (outbound adapter) or for an HTTP response (inbound adapter).
 	 */
+	@Override
 	public void fromHeaders(MessageHeaders headers, HttpHeaders target) {
 		if (logger.isDebugEnabled()){
 			logger.debug(MessageFormat.format("outboundHeaderNames={0}", CollectionUtils.arrayToList(outboundHeaderNames)));
@@ -356,6 +365,7 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 	 * Depending on which type of adapter is using this mapper, the HttpHeaders might be
 	 * from an HTTP request (inbound adapter) or from an HTTP response (outbound adapter).
 	 */
+	@Override
 	public Map<String, Object> toHeaders(HttpHeaders source) {
 		if (logger.isDebugEnabled()) {
 			logger.debug(MessageFormat.format("inboundHeaderNames={0}", CollectionUtils.arrayToList(inboundHeaderNames)));
@@ -389,9 +399,10 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 		return target;
 	}
 
+	@Override
 	public void afterPropertiesSet() throws Exception {
 		if (this.beanFactory != null){
-			this.conversionService = IntegrationContextUtils.getConversionService(this.beanFactory);
+			this.conversionService = IntegrationUtils.getConversionService(this.beanFactory);
 		}
 	}
 
@@ -901,7 +912,7 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 			return source.getIfNoneMatch();
 		}
 		else if (IF_MODIFIED_SINCE.equalsIgnoreCase(name)) {
-			long modifiedSince = source.getIfNotModifiedSince();
+			long modifiedSince = source.getIfModifiedSince();
 			return (modifiedSince > -1) ? modifiedSince : null;
 		}
 		else if (IF_UNMODIFIED_SINCE.equalsIgnoreCase(name)) {
@@ -984,6 +995,8 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 	 * Factory method for creating a basic outbound mapper instance.
 	 * This will map all standard HTTP request headers when sending an HTTP request,
 	 * and it will map all standard HTTP response headers when receiving an HTTP response.
+	 *
+	 * @return The default outbound mapper.
 	 */
 	public static DefaultHttpHeaderMapper outboundMapper() {
 		DefaultHttpHeaderMapper mapper = new DefaultHttpHeaderMapper();
@@ -997,6 +1010,8 @@ public class DefaultHttpHeaderMapper implements HeaderMapper<HttpHeaders>, BeanF
 	 * Factory method for creating a basic inbound mapper instance.
 	 * This will map all standard HTTP request headers when receiving an HTTP request,
 	 * and it will map all standard HTTP response headers when sending an HTTP response.
+	 *
+	 * @return The default inbound mapper.
 	 */
 	public static DefaultHttpHeaderMapper inboundMapper() {
 		DefaultHttpHeaderMapper mapper = new DefaultHttpHeaderMapper();

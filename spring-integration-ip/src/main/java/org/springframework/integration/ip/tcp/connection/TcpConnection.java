@@ -1,5 +1,5 @@
 /*
- * Copyright 2001-2013 the original author or authors.
+ * Copyright 2001-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import java.nio.channels.SocketChannel;
 
 import org.springframework.core.serializer.Deserializer;
 import org.springframework.core.serializer.Serializer;
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 
 /**
  * An abstraction over {@link Socket} and {@link SocketChannel} that
@@ -47,16 +47,16 @@ public interface TcpConnection extends Runnable {
 
 	/**
 	 * Converts and sends the message.
-	 * @param message The message
-	 * @throws Exception
+	 * @param message The message,
+	 * @throws Exception Any Exception.
 	 */
 	void send(Message<?> message) throws Exception;
 
 	/**
 	 * Uses the deserializer to obtain the message payload
 	 * from the connection's input stream.
-	 * @return The payload
-	 * @throws Exception
+	 * @return The payload.
+	 * @throws Exception Any Exception.
 	 */
 	Object getPayload() throws Exception;
 

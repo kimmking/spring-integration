@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,41 +13,43 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.integration.xmpp.inbound;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import java.util.HashSet;
 import java.util.Set;
 
-import org.jivesoftware.smack.Chat;
-import org.jivesoftware.smack.ChatManager;
 import org.jivesoftware.smack.PacketListener;
+import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.filter.PacketFilter;
 import org.jivesoftware.smack.packet.Message;
 import org.junit.Test;
+
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.core.MessageHandler;
-import org.springframework.integration.core.PollableChannel;
-import org.springframework.integration.message.ErrorMessage;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.integration.xmpp.core.XmppContextUtils;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.support.ErrorMessage;
 
 /**
  * @author Oleg Zhurakousky
  * @author Gunnar Hillert
+ * @author Florian Schmaus
  *
  */
 public class ChatMessageListeningEndpointTests {
@@ -63,6 +65,7 @@ public class ChatMessageListeningEndpointTests {
 		ChatMessageListeningEndpoint endpoint = new ChatMessageListeningEndpoint(connection);
 
 		doAnswer(new Answer<Object>() {
+			@Override
 			public Object answer(InvocationOnMock invocation) throws Throwable {
 				packetListSet.add((PacketListener) invocation.getArguments()[0]);
 				return null;
@@ -70,6 +73,7 @@ public class ChatMessageListeningEndpointTests {
 		}).when(connection).addPacketListener(Mockito.any(PacketListener.class), (PacketFilter) Mockito.any());
 
 		doAnswer(new Answer<Object>() {
+			@Override
 			public Object answer(InvocationOnMock invocation) throws Throwable {
 				packetListSet.remove(invocation.getArguments()[0]);
 				return null;
@@ -78,6 +82,7 @@ public class ChatMessageListeningEndpointTests {
 
 		assertEquals(0, packetListSet.size());
 		endpoint.setOutputChannel(new QueueChannel());
+		endpoint.setBeanFactory(mock(BeanFactory.class));
 		endpoint.afterPropertiesSet();
 		endpoint.start();
 		assertEquals(1, packetListSet.size());
@@ -105,25 +110,22 @@ public class ChatMessageListeningEndpointTests {
 	@Test(expected=IllegalArgumentException.class)
 	public void testNoXmppConnection(){
 		ChatMessageListeningEndpoint endpoint = new ChatMessageListeningEndpoint();
+		endpoint.setBeanFactory(mock(BeanFactory.class));
 		endpoint.afterPropertiesSet();
 	}
 
 	@Test
-	public void testWithErrorChannel(){
+	public void testWithErrorChannel() throws NotConnectedException{
 		DefaultListableBeanFactory bf = new DefaultListableBeanFactory();
 		XMPPConnection connection = mock(XMPPConnection.class);
 		bf.registerSingleton(XmppContextUtils.XMPP_CONNECTION_BEAN_NAME, connection);
-
-		ChatManager cm = mock(ChatManager.class);
-		when(connection.getChatManager()).thenReturn(cm);
-		Chat chat = mock(Chat.class);
-		when(cm.getThreadChat(Mockito.anyString())).thenReturn(chat);
 
 		ChatMessageListeningEndpoint endpoint = new ChatMessageListeningEndpoint();
 
 		DirectChannel outChannel = new DirectChannel();
 		outChannel.subscribe(new MessageHandler() {
-			public void handleMessage(org.springframework.integration.Message<?> message)
+			@Override
+			public void handleMessage(org.springframework.messaging.Message<?> message)
 					throws MessagingException {
 				throw new RuntimeException("ooops");
 			}

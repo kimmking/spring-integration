@@ -27,8 +27,8 @@ import java.util.Collection;
 import java.util.List;
 
 import org.junit.Test;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.integration.store.MessageGroupStore.MessageGroupCallback;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -110,6 +110,7 @@ public class SimpleMessageStoreTests {
 	@Test
 	public void shouldCopyMessageGroup() throws Exception {
 		SimpleMessageStore store = new SimpleMessageStore();
+		store.setCopyOnGet(true);
 		Message<String> testMessage1 = MessageBuilder.withPayload("foo").build();
 		store.addMessageToGroup("bar", testMessage1);
 		assertNotSame(store.getMessageGroup("bar"), store.getMessageGroup("bar"));

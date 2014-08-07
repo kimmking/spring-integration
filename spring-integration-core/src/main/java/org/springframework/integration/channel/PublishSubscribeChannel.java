@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.springframework.integration.channel;
 
 import java.util.concurrent.Executor;
 
+import org.springframework.integration.context.IntegrationProperties;
 import org.springframework.integration.dispatcher.BroadcastingDispatcher;
 import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
 import org.springframework.integration.util.ErrorHandlingTaskExecutor;
@@ -44,7 +45,7 @@ public class PublishSubscribeChannel extends AbstractSubscribableChannel {
 
 	private volatile int minSubscribers;
 
-	private volatile int maxSubscribers = Integer.MAX_VALUE;
+	private volatile Integer maxSubscribers;
 
 	@Override
 	public String getComponentType(){
@@ -54,6 +55,8 @@ public class PublishSubscribeChannel extends AbstractSubscribableChannel {
 	 * Create a PublishSubscribeChannel that will use an {@link Executor}
 	 * to invoke the handlers. If this is null, each invocation will occur in
 	 * the message sender's thread.
+	 *
+	 * @param executor The executor.
 	 */
 	public PublishSubscribeChannel(Executor executor) {
 		this.executor = executor;
@@ -79,6 +82,9 @@ public class PublishSubscribeChannel extends AbstractSubscribableChannel {
 	 * a {@link MessagePublishingErrorHandler} that sends error messages to
 	 * the failed request Message's error channel header if available or to
 	 * the default 'errorChannel' otherwise.
+	 *
+	 * @param errorHandler The error handler.
+	 *
 	 * @see #PublishSubscribeChannel(Executor)
 	 */
 	public void setErrorHandler(ErrorHandler errorHandler) {
@@ -90,6 +96,8 @@ public class PublishSubscribeChannel extends AbstractSubscribableChannel {
 	 * ignored. By default this is <code>false</code> meaning that an Exception
 	 * will be thrown whenever a handler fails. To override this and suppress
 	 * Exceptions, set the value to <code>true</code>.
+	 *
+	 * @param ignoreFailures true if failures should be ignored.
 	 */
 	public void setIgnoreFailures(boolean ignoreFailures) {
 		this.ignoreFailures = ignoreFailures;
@@ -103,6 +111,8 @@ public class PublishSubscribeChannel extends AbstractSubscribableChannel {
 	 * <em>not</em> be applied. If planning to use an Aggregator downstream
 	 * with the default correlation and completion strategies, you should set
 	 * this flag to <code>true</code>.
+	 *
+	 * @param applySequence true if the sequence information should be applied.
 	 */
 	public void setApplySequence(boolean applySequence) {
 		this.applySequence = applySequence;
@@ -112,7 +122,8 @@ public class PublishSubscribeChannel extends AbstractSubscribableChannel {
 	/**
 	 * Specify the maximum number of subscribers supported by the
 	 * channel's dispatcher.
-	 * @param maxSubscribers
+	 *
+	 * @param maxSubscribers The maximum number of subscribers allowed.
 	 */
 	public void setMaxSubscribers(int maxSubscribers) {
 		this.maxSubscribers = maxSubscribers;
@@ -121,8 +132,9 @@ public class PublishSubscribeChannel extends AbstractSubscribableChannel {
 
 	/**
 	 * If at least this number of subscribers receive the message,
-	 * {@link #send(org.springframework.integration.Message)}
+	 * {@link #send(org.springframework.messaging.Message)}
 	 * will return true. Default: 0.
+	 *
 	 * @param minSubscribers The minimum number of subscribers.
 	 */
 	public void setMinSubscribers(int minSubscribers) {
@@ -147,8 +159,12 @@ public class PublishSubscribeChannel extends AbstractSubscribableChannel {
 			this.dispatcher.setIgnoreFailures(this.ignoreFailures);
 			this.dispatcher.setApplySequence(this.applySequence);
 			this.dispatcher.setMinSubscribers(this.minSubscribers);
-			this.dispatcher.setMaxSubscribers(this.maxSubscribers);
 		}
+		if (this.maxSubscribers == null) {
+			Integer maxSubscribers = this.getIntegrationProperty(IntegrationProperties.CHANNELS_MAX_BROADCAST_SUBSCRIBERS, Integer.class);
+			this.setMaxSubscribers(maxSubscribers);
+		}
+		this.dispatcher.setBeanFactory(this.getBeanFactory());
 	}
 
 	@Override

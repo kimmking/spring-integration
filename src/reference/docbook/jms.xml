@@ -75,6 +75,28 @@
     <int:poller fixed-rate="30000"/>
 </int-jms:inbound-channel-adapter>]]></programlisting>
     </para>
+	<section id="jms-ib-transactions">
+		<title>Transactions</title>
+		<para>
+			Starting with <emphasis>version 4.0</emphasis>, the inbound channel adapter supports the
+			<code>session-transacted</code> attribute. In earlier versions, you had to inject a
+			<classname>JmsTemplate</classname> with <code>sessionTransacted</code> set to <code>true</code>.
+			(The adapter did allow the <code>acknowledge</code> attribute to be set to
+			<code>transacted</code> but this was incorrect and did not work).
+		</para>
+		<para>
+			Note, however, that setting <code>session-transacted</code> to <code>true</code> has
+			little value because the transaction is committed immediately after the <code>receive()</code>
+			and before the message is sent to the <code>channel</code>,
+		</para>
+		<para>
+			If you want the entire flow to be transactional (for example if there is a downstream
+			outbound channel adapter), you must use a <code>transactional</code> poller, with a
+			<classname>JmsTransactionManager</classname>. Or, consider using a
+			<code>jms-message-driven-channel-adapter</code> with <code>acknowledge</code>
+			set to <code>transacted</code>.
+		</para>
+	</section>
   </section>
 
   <section id="jms-message-driven-channel-adapter">
@@ -151,6 +173,18 @@
         those cases, it's the JMS properties mapping <emphasis>to</emphasis> Spring Integration MessageHeaders).
       </note>
     </para>
+    <section id="jms-ob-transactions">
+		<title>Transactions</title>
+		<para>
+			Starting with <emphasis>version 4.0</emphasis>, the outbound channel adapter supports the
+		<code>session-transacted</code> attribute. In earlier versions, you had to inject a
+		<classname>JmsTemplate</classname> with <code>sessionTransacted</code> set to <code>true</code>.
+			The attribute now sets the property on the built-in default <classname>JmsTemplate</classname>.
+			If a transaction exists (perhaps from an upstream <code>message-driven-channel-adapter</code>)
+			the send will be performed within the same transaction. Otherwise a new transaction will
+			be started.
+		</para>
+	</section>
   </section>
 
   <section id="jms-inbound-gateway">
@@ -240,7 +274,7 @@
       JMS Message that is <emphasis>received as a reply</emphasis> and then converted into a Spring Integration
       Message to be subsequently sent to the 'reply-channel' as shown in the example configuration above.
     </para>
-    <para><emphasis>&lt;reply-listener/&gt;</emphasis></para>
+    <para><emphasis role="bold">&lt;reply-listener/&gt;</emphasis></para>
     <para>
       <emphasis>Spring Integration 2.2</emphasis> introduced an alternative technique for handling replies.
       If you add a
@@ -251,13 +285,15 @@
       above.
     </para>
     <para>
-      When using a &lt;reply-listener/&gt;, instead of creating a <interfacename>TemporaryQueue</interfacename>
+      When using a <code>&lt;reply-listener/&gt;</code> with an outbound gateway with no
+      <code>reply-destination</code>,
+      instead of creating a <interfacename>TemporaryQueue</interfacename>
       for each request, a single <interfacename>TemporaryQueue</interfacename> is used
       (the gateway will create an additional <interfacename>TemporaryQueue</interfacename>, as
       necessary, if the connection to the broker is lost and recovered).
     </para>
     <para>
-      When using a <emphasis>correlation-key</emphasis>, multiple gateways can share the same
+      When using a <code>correlation-key</code>, multiple gateways can share the same
       reply destination because the listener container uses a selector that is unique
       to each gateway.
     </para>
@@ -315,7 +351,8 @@
     request-destination-expression=""]]><co id="jog200" /><![CDATA[
     request-destination-name=""]]><co id="jog210" /><![CDATA[
     request-pub-sub-domain=""]]><co id="jog220" /><![CDATA[
-    time-to-live="">]]><co id="jog230" /><![CDATA[
+    time-to-live=""]]><co id="jog230" /><![CDATA[
+    requires-reply="">]]><co id="jog231" /><![CDATA[
     <int-jms:reply-listener />]]><co id="jog240" /><![CDATA[
 </int-jms:outbound-gateway>]]></programlisting>
      <calloutlist>
@@ -337,6 +374,19 @@
          </code> is used, the correlation-key MUST be specified if an explicit <code>reply-destination</code>
          is provided.
         </para>
+		<para>
+			Starting with <emphasis>version 4.0.1</emphasis> this attribute also supports the value
+			<code>JMSCorrelationID*</code>, which means that if the outbound message already has a
+			<code>JMSCorrelationID</code> (mapped from the <code>jms_correlationId</code>) header,
+			it will be used, instead of generating a new one.
+			Note, the <code>JMSCorrelationID*</code> key is not allowed when using a
+			<code>&lt;reply-container/&gt;</code> because the container needs to set up a
+			message selector during initialization.
+			<important>
+				You should understand that the gateway has no means to ensure uniqueness and
+				unexpected side effects can occur if the provided correlation id is not unique.
+			</important>
+		</para>
        </callout>
        <callout arearefs="jog030">
         <para>
@@ -497,6 +547,18 @@
          This setting will only take effect if <code>explicit-qos-enabled</code> is <code>true</code>.
         </para>
        </callout>
+       <callout arearefs="jog231">
+        <para>
+			Specify whether this outbound gateway must return a non-null value. This value is
+			<code>true</code> by default, and a <classname>MessageTimeoutException</classname> will be thrown when
+			the underlying service does not return a value after the <code>receive-timeout</code>.
+			Note, it is important to keep in mind that, if the service is never expected
+			to return a reply, it would be better to use a <code>&lt;int-jms:outbound-channel-adapter/&gt;</code>
+			instead of a <code>&lt;int-jms:outbound-gateway/&gt;</code> with <code>requires-reply="false"</code>.
+			With the latter, the sending thread is blocked, waiting for a reply for the <code>receive-timeout</code>
+			period.
+        </para>
+       </callout>
        <callout arearefs="jog240">
         <para>
          When this element is included, replies are received by a <interfacename>MessageListenerContainer
@@ -521,6 +583,12 @@
     standard JMS API Headers as well as primitive/String Message Headers. Custom  header mapper could also be
     provided via <code>header-mapper</code> attribute of inbound and outbound gateways.
     </para>
+	<important>
+		Since <emphasis>version 4.0</emphasis>, the <code>JMSPriority</code> header is mapped to the standard
+		<code>priority</code> header for inbound messages (previously, the <code>priority</code> header was only used for
+		outbound messages). To revert to the previous behavior (do not map inbound priority), use the
+		<code>mapInboundPriority</code> property of <classname>DefaultJmsHeaderMapper</classname> with argument set to <code>false</code>.
+	</important>
 
   </section>
 

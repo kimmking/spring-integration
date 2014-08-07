@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,12 @@ import java.util.concurrent.Executor;
 
 import org.springframework.core.serializer.Deserializer;
 import org.springframework.core.serializer.Serializer;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.ip.IpHeaders;
-import org.springframework.integration.message.ErrorMessage;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
 import org.springframework.integration.util.SimplePool;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.ErrorMessage;
 
 /**
  * @author Gary Russell
@@ -44,6 +44,7 @@ public class CachingClientConnectionFactory extends AbstractClientConnectionFact
 		this.targetConnectionFactory = target;
 		pool = new SimplePool<TcpConnectionSupport>(poolSize, new SimplePool.PoolItemCallback<TcpConnectionSupport>() {
 
+			@Override
 			public TcpConnectionSupport createForPool() {
 				try {
 					return targetConnectionFactory.getConnection();
@@ -52,10 +53,12 @@ public class CachingClientConnectionFactory extends AbstractClientConnectionFact
 				}
 			}
 
+			@Override
 			public boolean isStale(TcpConnectionSupport connection) {
 				return !connection.isOpen();
 			}
 
+			@Override
 			public void removedFromPool(TcpConnectionSupport connection) {
 				connection.close();
 			}
@@ -143,8 +146,9 @@ public class CachingClientConnectionFactory extends AbstractClientConnectionFact
 		 */
 		@Override
 		public boolean onMessage(Message<?> message) {
-			MessageBuilder<?> messageBuilder = MessageBuilder.fromMessage(message)
-					.setHeader(IpHeaders.CONNECTION_ID, this.getConnectionId());
+			AbstractIntegrationMessageBuilder<?> messageBuilder = CachingClientConnectionFactory.this
+					.getMessageBuilderFactory().fromMessage(message)
+						.setHeader(IpHeaders.CONNECTION_ID, this.getConnectionId());
 			if (message.getHeaders().get(IpHeaders.ACTUAL_CONNECTION_ID) == null) {
 				messageBuilder.setHeader(IpHeaders.ACTUAL_CONNECTION_ID,
 						message.getHeaders().get(IpHeaders.CONNECTION_ID));
@@ -165,11 +169,6 @@ public class CachingClientConnectionFactory extends AbstractClientConnectionFact
 	@Override
 	public boolean isRunning() {
 		return targetConnectionFactory.isRunning();
-	}
-
-	@Override
-	public void close() {
-		targetConnectionFactory.close();
 	}
 
 	@Override
@@ -317,6 +316,7 @@ public class CachingClientConnectionFactory extends AbstractClientConnectionFact
 	public void registerListener(TcpListener listener) {
 		super.registerListener(listener);
 		targetConnectionFactory.registerListener(new TcpListener() {
+			@Override
 			public boolean onMessage(Message<?> message) {
 				if (!(message instanceof ErrorMessage)) {
 					throw new UnsupportedOperationException("This should never be called");

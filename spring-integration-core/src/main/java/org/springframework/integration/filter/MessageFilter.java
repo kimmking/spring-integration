@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,14 @@
 
 package org.springframework.integration.filter;
 
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactoryAware;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.MessageRejectedException;
 import org.springframework.integration.core.MessageSelector;
 import org.springframework.integration.handler.AbstractReplyProducingPostProcessingMessageHandler;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.core.DestinationResolutionException;
 import org.springframework.util.Assert;
 
 /**
@@ -36,6 +38,7 @@ import org.springframework.util.Assert;
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  * @author Gary Russell
+ * @author Artem Bilan
  */
 public class MessageFilter extends AbstractReplyProducingPostProcessingMessageHandler {
 
@@ -45,10 +48,11 @@ public class MessageFilter extends AbstractReplyProducingPostProcessingMessageHa
 
 	private volatile MessageChannel discardChannel;
 
+	private volatile String discardChannelName;
 
 	/**
-	 * Create a MessageFilter that will delegate to the given
-	 * {@link MessageSelector}.
+	 * Create a MessageFilter that will delegate to the given {@link MessageSelector}.
+	 * @param selector The message selector.
 	 */
 	public MessageFilter(MessageSelector selector) {
 		Assert.notNull(selector, "selector must not be null");
@@ -65,6 +69,7 @@ public class MessageFilter extends AbstractReplyProducingPostProcessingMessageHa
 	 * a discard channel is provided, but if so, it will still apply
 	 * (in such a case, the Message will be sent to the discard channel,
 	 * and <em>then</em> the exception will be thrown).
+	 * @param throwExceptionOnRejection true if an exception should be thrown.
 	 * @see #setDiscardChannel(MessageChannel)
 	 */
 	public void setThrowExceptionOnRejection(boolean throwExceptionOnRejection) {
@@ -77,16 +82,23 @@ public class MessageFilter extends AbstractReplyProducingPostProcessingMessageHa
 	 * the 'throwExceptionOnRejection' flag determines whether rejected Messages
 	 * trigger an exception. That value is evaluated regardless of the presence
 	 * of a discard channel.
+	 * @param discardChannel The discard channel.
 	 * @see #setThrowExceptionOnRejection(boolean)
 	 */
 	public void setDiscardChannel(MessageChannel discardChannel) {
 		this.discardChannel = discardChannel;
 	}
 
+	public void setDiscardChannelName(String discardChannelName) {
+		Assert.hasText(discardChannelName, "'discardChannelName' must not be empty");
+		this.discardChannelName = discardChannelName;
+	}
+
 	/**
 	 * Set to 'true' if you wish the discard processing to occur within any
 	 * request handler advice applied to this filter. Also applies to
 	 * throwing an exception on rejection. Default: true.
+	 * @param discardWithinAdvice true to discard within the advice.
 	 */
 	public void setDiscardWithinAdvice(boolean discardWithinAdvice) {
 		this.setPostProcessWithinAdvice(discardWithinAdvice);
@@ -99,10 +111,12 @@ public class MessageFilter extends AbstractReplyProducingPostProcessingMessageHa
 
 	@Override
 	protected void doInit() {
+		Assert.state(!(this.discardChannelName != null && this.discardChannel != null),
+					"'discardChannelName' and 'discardChannel' are mutually exclusive.");
 		if (this.selector instanceof AbstractMessageProcessingSelector) {
 			((AbstractMessageProcessingSelector) this.selector).setConversionService(this.getConversionService());
 		}
-		if (this.selector instanceof BeanFactoryAware) {
+		if (this.selector instanceof BeanFactoryAware && this.getBeanFactory() != null) {
 			((BeanFactoryAware) this.selector).setBeanFactory(this.getBeanFactory());
 		}
 	}
@@ -120,11 +134,27 @@ public class MessageFilter extends AbstractReplyProducingPostProcessingMessageHa
 	@Override
 	public Object postProcess(Message<?> message, Object result) {
 		if (result == null) {
+			if (this.discardChannelName != null) {
+				synchronized (this) {
+					if (this.discardChannelName != null) {
+						try {
+							this.discardChannel = this.getBeanFactory()
+									.getBean(this.discardChannelName, MessageChannel.class);
+							this.discardChannelName = null;
+						}
+						catch (BeansException e) {
+							throw new DestinationResolutionException("Failed to look up MessageChannel with name '"
+									+ this.discardChannelName + "' in the BeanFactory.");
+						}
+					}
+				}
+			}
 			if (this.discardChannel != null) {
 				this.getMessagingTemplate().send(this.discardChannel, message);
 			}
 			if (this.throwExceptionOnRejection) {
-				throw new MessageRejectedException(message, "MessageFilter '" + this.getComponentName() + "' rejected Message");
+				throw new MessageRejectedException(message, "MessageFilter '" + this.getComponentName()
+						+ "' rejected Message");
 			}
 		}
 		return result;

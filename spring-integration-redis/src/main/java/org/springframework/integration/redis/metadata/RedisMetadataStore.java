@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2013-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -18,6 +18,7 @@ import org.springframework.data.redis.core.BoundHashOperations;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.support.collections.RedisProperties;
+import org.springframework.integration.metadata.ConcurrentMetadataStore;
 import org.springframework.integration.metadata.MetadataStore;
 import org.springframework.util.Assert;
 
@@ -29,7 +30,7 @@ import org.springframework.util.Assert;
  * @author Artem Bilan
  * @since 3.0
  */
-public class RedisMetadataStore implements MetadataStore {
+public class RedisMetadataStore implements ConcurrentMetadataStore {
 
 	public static final String KEY = "MetaData";
 
@@ -37,6 +38,8 @@ public class RedisMetadataStore implements MetadataStore {
 
 	/**
 	 * Specifies the {@link RedisProperties} backend for this {@link MetadataStore}.
+	 *
+	 * @param properties The properties.
 	 */
 	public RedisMetadataStore(RedisProperties properties) {
 		Assert.notNull(properties, "'properties' must not be null.");
@@ -46,6 +49,8 @@ public class RedisMetadataStore implements MetadataStore {
 	/**
 	 * Initializes the {@link RedisProperties} by provided {@link RedisConnectionFactory}
 	 * and default hash key - {@link #KEY}.
+	 *
+	 * @param connectionFactory The connection factory.
 	 */
 	public RedisMetadataStore(RedisConnectionFactory connectionFactory) {
 		this(connectionFactory, KEY);
@@ -53,6 +58,9 @@ public class RedisMetadataStore implements MetadataStore {
 
 	/**
 	 * Initializes the {@link RedisProperties} by provided {@link RedisConnectionFactory} and key.
+	 *
+	 * @param connectionFactory The connection factory.
+	 * @param key The key.
 	 */
 	public RedisMetadataStore(RedisConnectionFactory connectionFactory, String key) {
 		Assert.notNull(connectionFactory, "'connectionFactory' must not be null.");
@@ -65,6 +73,8 @@ public class RedisMetadataStore implements MetadataStore {
 	/**
 	 * Initializes the {@link RedisProperties} by provided {@link RedisConnectionFactory}
 	 * and default hash key - {@link #KEY}.
+	 *
+	 * @param operations The Redis operations object.
 	 */
 	public RedisMetadataStore(RedisOperations<String, ?> operations) {
 		this(operations, KEY);
@@ -72,6 +82,9 @@ public class RedisMetadataStore implements MetadataStore {
 
 	/**
 	 * Initializes the {@link RedisProperties} by provided {@link RedisConnectionFactory} and key.
+	 *
+	 * @param operations The Redis operations object.
+	 * @param key The key.
 	 */
 	public RedisMetadataStore(RedisOperations<String, ?> operations, String key) {
 		Assert.notNull(operations, "'operations' must not be null.");
@@ -86,6 +99,7 @@ public class RedisMetadataStore implements MetadataStore {
 	 * @param key Must not be null
 	 * @param value Must not be null
 	 */
+	@Override
 	public void put(String key, String value) {
 		Assert.notNull(key, "'key' must not be null.");
 		Assert.notNull(value, "'value' must not be null.");
@@ -97,16 +111,44 @@ public class RedisMetadataStore implements MetadataStore {
 	 *
 	 * @param key Must not be null
 	 */
+	@Override
 	public String get(String key) {
 		Assert.notNull(key, "'key' must not be null.");
-		return (String) this.properties.get(key);
+		Object value = this.properties.get(key);
+		if (value != null) {
+			Assert.isInstanceOf(String.class, value, "Invalid type in the store");
+		}
+		return (String) value;
 	}
 
 	@Override
 
 	public String remove(String key) {
 		Assert.notNull(key, "'key' must not be null.");
-		return (String) this.properties.remove(key);
+		Object removed = this.properties.remove(key);
+		if (removed != null) {
+			Assert.isInstanceOf(String.class, removed, "The removed value was an invalid type");
+		}
+		return (String) removed;
+	}
+
+	@Override
+	public String putIfAbsent(String key, String value) {
+		Assert.notNull(key, "'key' must not be null.");
+		Assert.notNull(value, "'value' must not be null.");
+		Object oldValue = this.properties.putIfAbsent(key, value);
+		if (oldValue != null) {
+			Assert.isInstanceOf(String.class, oldValue, "Invalid type in the store");
+		}
+		return (String) oldValue;
+	}
+
+	@Override
+	public boolean replace(String key, String oldValue, String newValue) {
+		Assert.notNull(key, "'key' must not be null.");
+		Assert.notNull(oldValue, "'oldValue' must not be null.");
+		Assert.notNull(newValue, "'newValue' must not be null.");
+		return this.properties.replace(key, oldValue, newValue);
 	}
 
 }

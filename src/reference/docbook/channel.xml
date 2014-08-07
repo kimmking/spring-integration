@@ -199,17 +199,27 @@
       </para>
       <para>
         The <classname>DirectChannel</classname> internally delegates to a Message Dispatcher to invoke its
-        subscribed Message Handlers, and that dispatcher can have a load-balancing strategy. The load-balancer
-        determines how invocations will be ordered in the case that there are multiple handlers subscribed to the
-        same channel. When using the namespace support described below, the default strategy is
-        "round-robin" which essentially load-balances across the handlers in rotation.
-        <note>
-          The "round-robin" strategy is currently the only implementation available out-of-the-box in Spring
-          Integration. Other strategy implementations may be added in future versions.
-        </note>
+        subscribed Message Handlers, and that dispatcher can have a load-balancing strategy exposed via
+        <emphasis>load-balancer</emphasis> or <emphasis>load-balancer-ref</emphasis> attributes (mutually exclusive). The load balancing strategy
+        is used by the Message Dispatcher to help determine how Messages are distributed amongst Message Handlers
+        in the case that there are multiple Message Handlers subscribed to the same channel.
+        As a convinience the <emphasis>load-balancer</emphasis> attribute exposes enumeration of values pointing to pre-existing implementations
+        of <classname>LoadBalancingStrategy</classname>.
+        The "round-robin" (load-balances across the handlers in rotation) and "none" (for the cases where one wants to explicitely disable load balancing)
+        are the only available values.
+        Other strategy implementations may be added in future versions.
+        However, since version 3.0 you can  provide your own implementation of the <classname>LoadBalancingStrategy</classname> and
+        inject it using <emphasis>load-balancer-ref</emphasis> attribute which should point to a bean that implements
+        <classname>LoadBalancingStrategy</classname>.
+        <programlisting language="xml"><![CDATA[<int:channel id="lbRefChannel">
+  <int:dispatcher load-balancer-ref="lb"/>
+</int:channel>
+
+<bean id="lb" class="foo.bar.SampleLoadBalancingStrategy"/>]]></programlisting>
+    Note that <emphasis>load-balancer</emphasis> or <emphasis>load-balancer-ref</emphasis> attributes are mutually exclusive.
       </para>
       <para>
-        The load-balancer also works in combination with a boolean <emphasis>failover</emphasis> property.
+        The load-balancing also works in combination with a boolean <emphasis>failover</emphasis> property.
         If the "failover" value is true (the default), then the dispatcher will fall back to any subsequent
         handlers as necessary when preceding handlers throw Exceptions. The order is determined by an optional
         order value defined on the handlers themselves or, if no such value exists, the order in which the
@@ -499,6 +509,23 @@ payload to an Integer.
                For more information regarding Payload Type Conversion, please read <xref linkend="payload-type-conversion"/>.
             </para>
         </note>
+        <para>
+            Beginning with <emphasis>version 4.0</emphasis>, the <code>integrationConversionService</code> is invoked
+            by the <classname>DefaultDatatypeChannelMessageConverter</classname>, which looks up the conversion
+            service in the application context. To use a different conversion technique, you can specify the
+            <code>message-converter</code> attribute on the channel. This must be a reference to a
+            <interfacename>MessageConverter</interfacename> implementation.
+            Only the <code>fromMessage</code> method is used, which provides the
+            converter with access to the message headers (for example if the conversion might need information
+            from the headers, such as <code>content-type</code>). The method can return just the converted
+            payload, or a full <classname>Message</classname> object. If the latter, the converter must
+            be careful to copy all the headers from the inbound message.
+        </para>
+        <para>
+            Alternatively, declare a <code>&lt;bean/&gt;</code> of type <interfacename>MessageConverter</interfacename>
+            with an id <code>"datatypeChannelMessageConverter"</code> and that converter will be used by
+            all channels with a <code>datatype</code>.
+        </para>
     </section>
 
     <section id="channel-configuration-queuechannel">
@@ -539,24 +566,32 @@ payload to an Integer.
       <code>message-store</code> attribute as shown in the next example.
 
       <programlisting language="xml"><![CDATA[<int:channel id="dbBackedChannel">
-    <int:queue message-store="messageStore">
-<int:channel id="myChannel">
+    <int:queue message-store="channelStore"/>
+</int:channel>
 
-<int-jdbc:message-store id="messageStore" data-source="someDataSource"/>]]></programlisting>
+<bean id="channelStore" class="o.s.i.jdbc.store.JdbcChannelMessageStore">
+    <property name="dataSource" ref="dataSource"/>
+    <property name="channelMessageStoreQueryProvider" ref="queryProvider"/>
+</bean>]]></programlisting>
 
-     The above example also shows that <classname>JdbcMessageStore</classname> can be configured with the namespace support
-     provided by the Spring Integration JDBC module. All you need to do is inject any <classname>javax.sql.DataSource</classname>
-     instance. The Spring Integration JDBC module also provides schema DDL for most popular databases. These schemas are located in
-     the <emphasis>org.springframework.integration.jdbc</emphasis> package of that module (spring-integration-jdbc).
+     The Spring Integration JDBC module also provides schema DDL for a number of popular databases. These schemas are located in
+     the <emphasis>org.springframework.integration.jdbc.store.channel</emphasis> package of that module (spring-integration-jdbc).
 
      <important>
-     One important feature is that with any transactional persistent store (e.g., JdbcMessageStore), as long as the poller has a transaction configured,
+     One important feature is that with any transactional persistent store (e.g., JdbcChannelMessageStore), as long as the poller has a transaction configured,
      a Message removed from the store will only be permanently removed if the transaction completes
      successfully, otherwise the transaction will roll back and the Message will not be lost.
      </important>
      Many other implementations of the Message Store will be available as the growing number of Spring projects
      related to "NoSQL" data stores provide the underlying support. Of course, you can always provide your own implementation
      of the MessageGroupStore interface if you cannot find one that meets your particular needs.
+      </para>
+      <para>
+        Since <emphasis>version 4.0</emphasis>, it is recommended that <classname>QueueChannel</classname>s are
+        configured to use a <interfacename>ChannelMessageStore</interfacename> if possible. These are generally optimized
+        for this use, when compared with a general message store. If the <interfacename>ChannelMessageStore</interfacename>
+        is a <interfacename>ChannelPriorityMessageStore</interfacename> the messages will be received in
+        FIFO within priority order. The notion of priority is determined by the message store implementation.
       </para>
     </section>
 
@@ -624,6 +659,16 @@ payload to an Integer.
                     capacity="10"/>
 </int:channel>
 ]]></programlisting>
+      </para>
+      <para>
+        Since <emphasis>version 4.0</emphasis>, the <code>priority-channel</code> child element supports
+        the <code>message-store</code> option (<code>comparator</code> is not allowed in that case).
+        The message store must be a <interfacename>PriorityCapableChannelMessageStore</interfacename> and, in this
+        case, the namespace parser will declare a <classname>QueueChannel</classname> instead of
+        a <classname>PriorityChannel</classname>. Implementations of the
+		<classname>PriorityCapableChannelMessageStore</classname> are currently provided for <code>Redis</code>,
+        <code>JDBC</code> and <code>MongoDB</code>.
+        See <xref linkend="channel-configuration-queuechannel"/>.
       </para>
     </section>
     <section id="channel-configuration-rendezvouschannel">
@@ -796,6 +841,17 @@ payload to an Integer.
        best of both worlds: 1) the sending of a JMS Message can occur within the transaction while
        2) it is still a "fire-and-forget" action thereby preventing any noticeable delay in the main message flow.
       </para>
+      <important>
+       Starting with <emphasis>version 4.0</emphasis>, it is important to avoid circular references when an
+       interceptor (such as <classname>WireTap</classname>) references a channel itself. You need to exclude
+       such channels from those being intercepted by the current interceptor. This can be done with appropriate
+       <code>patterns</code> or programmatically. If you have a custom <interfacename>ChannelInterceptor</interfacename>
+       that references a <code>channel</code>, consider implementing <interfacename>VetoCapableInterceptor</interfacename>.
+       That way, the framework will ask the interceptor if it's OK to intercept each channel that is a candidate based
+       on the pattern. You can also add runtime protection in the interceptor methods that ensures that the channel is
+       not one that is referenced by the interceptor. The <classname>WireTap</classname> uses both of these
+       techniques.
+      </important>
   </section>
   <section id="channel-global-wiretap">
       <title>Global Wire Tap Configuration</title>

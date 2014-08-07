@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,26 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.integration.amqp.channel;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
+import com.rabbitmq.client.AMQP.Queue.DeclareOk;
+import com.rabbitmq.client.Channel;
 import org.apache.commons.logging.Log;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.core.Message;
@@ -42,10 +42,9 @@ import org.springframework.amqp.rabbit.connection.Connection;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.DirectFieldAccessor;
-import org.springframework.integration.MessageDeliveryException;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.integration.test.util.TestUtils;
-
-import com.rabbitmq.client.Channel;
+import org.springframework.messaging.MessageDeliveryException;
 
 
 /**
@@ -55,11 +54,17 @@ import com.rabbitmq.client.Channel;
  */
 public class DispatcherHasNoSubscribersTests {
 
+	@SuppressWarnings("unchecked")
 	@Test
-	public void testPtP() {
+	public void testPtP() throws Exception {
 		final Channel channel = mock(Channel.class);
+		DeclareOk declareOk = mock(DeclareOk.class);
+		when(declareOk.getQueue()).thenReturn("noSubscribersChannel");
+		when(channel.queueDeclare(anyString(), anyBoolean(), anyBoolean(), anyBoolean(), any(Map.class)))
+				.thenReturn(declareOk);
 		Connection connection = mock(Connection.class);
 		doAnswer(new Answer<Channel>() {
+			@Override
 			public Channel answer(InvocationOnMock invocation) throws Throwable {
 				return channel;
 			}}).when(connection).createChannel(anyBoolean());
@@ -69,9 +74,10 @@ public class DispatcherHasNoSubscribersTests {
 		container.setConnectionFactory(connectionFactory);
 		AmqpTemplate amqpTemplate = mock(AmqpTemplate.class);
 
-		PointToPointSubscribableAmqpChannel amqpChannel = new PointToPointSubscribableAmqpChannel("noSubscribersChannel",
-				container, amqpTemplate);
+		PointToPointSubscribableAmqpChannel amqpChannel =
+				new PointToPointSubscribableAmqpChannel("noSubscribersChannel", container, amqpTemplate);
 		amqpChannel.setBeanName("noSubscribersChannel");
+		amqpChannel.setBeanFactory(mock(BeanFactory.class));
 		amqpChannel.afterPropertiesSet();
 
 		MessageListener listener = (MessageListener) container.getMessageListener();
@@ -89,6 +95,7 @@ public class DispatcherHasNoSubscribersTests {
 		final Channel channel = mock(Channel.class);
 		Connection connection = mock(Connection.class);
 		doAnswer(new Answer<Channel>() {
+			@Override
 			public Channel answer(InvocationOnMock invocation) throws Throwable {
 				return channel;
 			}}).when(connection).createChannel(anyBoolean());
@@ -101,11 +108,12 @@ public class DispatcherHasNoSubscribersTests {
 		PublishSubscribeAmqpChannel amqpChannel = new PublishSubscribeAmqpChannel("noSubscribersChannel",
 				container, amqpTemplate) {
 					@Override
-					protected Queue initializeQueue(AmqpAdmin admin,
+					protected String obtainQueueName(AmqpAdmin admin,
 							String channelName) {
-						return queue;
+						return queue.getName();
 					}};
 		amqpChannel.setBeanName("noSubscribersChannel");
+		amqpChannel.setBeanFactory(mock(BeanFactory.class));
 		amqpChannel.afterPropertiesSet();
 
 		List<String> logList = insertMockLoggerInListener(amqpChannel);
@@ -121,6 +129,7 @@ public class DispatcherHasNoSubscribersTests {
 		Log logger = mock(Log.class);
 		final ArrayList<String> logList = new ArrayList<String>();
 		doAnswer(new Answer<Object>() {
+			@Override
 			public Object answer(InvocationOnMock invocation)
 					throws Throwable {
 				String message = (String) invocation.getArguments()[0];

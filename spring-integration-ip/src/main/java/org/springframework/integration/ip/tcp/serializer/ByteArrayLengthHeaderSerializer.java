@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 
 package org.springframework.integration.ip.tcp.serializer;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -23,6 +22,7 @@ import java.nio.ByteBuffer;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+
 
 /**
  * Reads data in an InputStream to a byte[]; data must be preceded by
@@ -75,7 +75,7 @@ public class ByteArrayLengthHeaderSerializer extends AbstractByteArraySerializer
 	 * Constructs the serializer using the supplied header size.
 	 * Valid header sizes are {@link #HEADER_SIZE_INT} (default),
 	 * {@link #HEADER_SIZE_UNSIGNED_BYTE} and {@link #HEADER_SIZE_UNSIGNED_SHORT}
-	 * @param headerSize
+	 * @param headerSize The header size.
 	 */
 	public ByteArrayLengthHeaderSerializer(int headerSize) {
 		if (headerSize != HEADER_SIZE_INT &&
@@ -92,25 +92,44 @@ public class ByteArrayLengthHeaderSerializer extends AbstractByteArraySerializer
 	 * IOException if the length field exceeds the maxMessageSize.
 	 * Throws a {@link SoftEndOfStreamException} if the stream
 	 * is closed between messages.
+	 *
+	 * @param inputStream The input stream.
+	 * @throws IOException Any IOException.
 	 */
+	@Override
 	public byte[] deserialize(InputStream inputStream) throws IOException {
 		int messageLength = this.readHeader(inputStream);
 		if (logger.isDebugEnabled()) {
 			logger.debug("Message length is " + messageLength);
 		}
-		if (messageLength > this.maxMessageSize) {
-			throw new IOException("Message length " + messageLength +
-					" exceeds max message length: " + this.maxMessageSize);
+		byte[] messagePart = null;
+		try {
+			if (messageLength > this.maxMessageSize) {
+				throw new IOException("Message length " + messageLength +
+						" exceeds max message length: " + this.maxMessageSize);
+			}
+			messagePart = new byte[messageLength];
+			read(inputStream, messagePart, false);
+			return messagePart;
 		}
-		byte[] messagePart = new byte[messageLength];
-		read(inputStream, messagePart, false);
-		return messagePart;
+		catch (IOException e) {
+			publishEvent(e, messagePart, -1);
+			throw e;
+		}
+		catch (RuntimeException e) {
+			publishEvent(e, messagePart, -1);
+			throw e;
+		}
 	}
 
 	/**
 	 * Writes the byte[] to the output stream, preceded by a 4 byte
 	 * length in network byte order (big endian).
+	 *
+	 * @param bytes The bytes.
+	 * @param outputStream The output stream.
 	 */
+	@Override
 	public void serialize(byte[] bytes, OutputStream outputStream) throws IOException {
 		this.writeHeader(outputStream, bytes.length);
 		outputStream.write(bytes);
@@ -120,10 +139,12 @@ public class ByteArrayLengthHeaderSerializer extends AbstractByteArraySerializer
 	/**
 	 * Reads data from the socket and puts the data in buffer. Blocks until
 	 * buffer is full or a socket timeout occurs.
+	 *
+	 * @param inputStream The input stream.
 	 * @param buffer the buffer into which the data should be read
 	 * @param header true if we are reading the header
 	 * @return {@code < 0} if socket closed and not in the middle of a message
-	 * @throws IOException
+	 * @throws IOException Any IOException.
 	 */
 	protected int read(InputStream inputStream, byte[] buffer, boolean header)
 			throws IOException {
@@ -151,9 +172,9 @@ public class ByteArrayLengthHeaderSerializer extends AbstractByteArraySerializer
 
 	/**
 	 * Writes the header, according to the header format.
-	 * @param outputStream
-	 * @param length
-	 * @throws IOException
+	 * @param outputStream The output stream.
+	 * @param length The length.
+	 * @throws IOException Any IOException.
 	 */
 	protected void writeHeader(OutputStream outputStream, int length) throws IOException {
 		ByteBuffer lengthPart = ByteBuffer.allocate(this.headerSize);
@@ -185,37 +206,51 @@ public class ByteArrayLengthHeaderSerializer extends AbstractByteArraySerializer
 
 	/**
 	 * Reads the header and returns the length of the data part.
-	 * @param inputStream
-	 * @return The length of the data part
-	 * @throws IOException
+	 *
+	 * @param inputStream The input stream.
+	 * @return The length of the data part.
+	 * @throws IOException Any IOException.
 	 * @throws SoftEndOfStreamException if socket closes
 	 * before any length data read.
 	 */
 	protected int readHeader(InputStream inputStream) throws IOException {
 		byte[] lengthPart = new byte[this.headerSize];
-		int status = read(inputStream, lengthPart, true);
-		if (status < 0) {
-			throw new SoftEndOfStreamException("Stream closed between payloads");
-		}
-		int messageLength;
-		switch (this.headerSize) {
-		case HEADER_SIZE_INT:
-			messageLength = ByteBuffer.wrap(lengthPart).getInt();
-			if (messageLength < 0) {
-				throw new IllegalArgumentException("Length header:"
-						+ messageLength
-						+ " is negative");
+		try {
+			int status = read(inputStream, lengthPart, true);
+			if (status < 0) {
+				throw new SoftEndOfStreamException("Stream closed between payloads");
 			}
-			break;
-		case HEADER_SIZE_UNSIGNED_BYTE:
-			messageLength = ByteBuffer.wrap(lengthPart).get() & 0xff;
-			break;
-		case HEADER_SIZE_UNSIGNED_SHORT:
-			messageLength = ByteBuffer.wrap(lengthPart).getShort() & 0xffff;
-			break;
-		default:
-			throw new IllegalArgumentException("Bad header size:" + headerSize);
+			int messageLength;
+			switch (this.headerSize) {
+			case HEADER_SIZE_INT:
+				messageLength = ByteBuffer.wrap(lengthPart).getInt();
+				if (messageLength < 0) {
+					throw new IllegalArgumentException("Length header:"
+							+ messageLength
+							+ " is negative");
+				}
+				break;
+			case HEADER_SIZE_UNSIGNED_BYTE:
+				messageLength = ByteBuffer.wrap(lengthPart).get() & 0xff;
+				break;
+			case HEADER_SIZE_UNSIGNED_SHORT:
+				messageLength = ByteBuffer.wrap(lengthPart).getShort() & 0xffff;
+				break;
+			default:
+				throw new IllegalArgumentException("Bad header size:" + headerSize);
+			}
+			return messageLength;
 		}
-		return messageLength;
+		catch (SoftEndOfStreamException e) {
+			throw e;
+		}
+		catch (IOException e) {
+			publishEvent(e, lengthPart, -1);
+			throw e;
+		}
+		catch (RuntimeException e) {
+			publishEvent(e, lengthPart, -1);
+			throw e;
+		}
 	}
 }

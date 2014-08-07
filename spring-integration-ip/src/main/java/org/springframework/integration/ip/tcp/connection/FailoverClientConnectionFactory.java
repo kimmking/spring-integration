@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,10 +23,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.springframework.core.serializer.Deserializer;
 import org.springframework.core.serializer.Serializer;
-import org.springframework.integration.Message;
 import org.springframework.integration.ip.IpHeaders;
-import org.springframework.integration.message.ErrorMessage;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.ErrorMessage;
 import org.springframework.util.Assert;
 
 /**
@@ -82,6 +82,7 @@ public class FailoverClientConnectionFactory extends AbstractClientConnectionFac
 		super.registerListener(listener);
 		for (AbstractClientConnectionFactory factory : this.factories) {
 			factory.registerListener(new TcpListener() {
+				@Override
 				public boolean onMessage(Message<?> message) {
 					if (!(message instanceof ErrorMessage)) {
 						throw new UnsupportedOperationException("This should never be called");
@@ -112,12 +113,6 @@ public class FailoverClientConnectionFactory extends AbstractClientConnectionFac
 		return failoverTcpConnection;
 	}
 
-	@Override
-	public void close() {
-		for (AbstractClientConnectionFactory factory : this.factories) {
-			factory.close();
-		}
-	}
 
 	@Override
 	public void start() {
@@ -229,6 +224,7 @@ public class FailoverClientConnectionFactory extends AbstractClientConnectionFac
 			this.open = false;
 		}
 
+		@Override
 		public boolean isOpen() {
 			return this.open;
 		}
@@ -238,6 +234,7 @@ public class FailoverClientConnectionFactory extends AbstractClientConnectionFac
 		 * send to a new connection obtained from {@link #findAConnection()}.
 		 * If send fails on a connection from every factory, we give up.
 		 */
+		@Override
 		public synchronized void send(Message<?> message) throws Exception {
 			boolean success = false;
 			AbstractClientConnectionFactory lastFactoryToTry = this.currentFactory;
@@ -268,10 +265,12 @@ public class FailoverClientConnectionFactory extends AbstractClientConnectionFac
 			}
 		}
 
+		@Override
 		public Object getPayload() throws Exception {
 			return this.delegate.getPayload();
 		}
 
+		@Override
 		public void run() {
 			throw new UnsupportedOperationException("Not supported on FailoverTcpConnection");
 		}
@@ -286,10 +285,12 @@ public class FailoverClientConnectionFactory extends AbstractClientConnectionFac
 			return this.delegate.getHostAddress();
 		}
 
+		@Override
 		public int getPort() {
 			return this.delegate.getPort();
 		}
 
+		@Override
 		public Object getDeserializerStateKey() {
 			return this.delegate.getDeserializerStateKey();
 		}
@@ -350,10 +351,12 @@ public class FailoverClientConnectionFactory extends AbstractClientConnectionFac
 		 * the actual connectionId in another header for convenience and tracing
 		 * purposes.
 		 */
+		@Override
 		public boolean onMessage(Message<?> message) {
 			if (this.delegate.getConnectionId().equals(message.getHeaders().get(IpHeaders.CONNECTION_ID))) {
-				MessageBuilder<?> messageBuilder = MessageBuilder.fromMessage(message)
-						.setHeader(IpHeaders.CONNECTION_ID, this.getConnectionId());
+				AbstractIntegrationMessageBuilder<?> messageBuilder = FailoverClientConnectionFactory.this
+						.getMessageBuilderFactory().fromMessage(message)
+							.setHeader(IpHeaders.CONNECTION_ID, this.getConnectionId());
 				if (message.getHeaders().get(IpHeaders.ACTUAL_CONNECTION_ID) == null) {
 					messageBuilder.setHeader(IpHeaders.ACTUAL_CONNECTION_ID,
 							message.getHeaders().get(IpHeaders.CONNECTION_ID));

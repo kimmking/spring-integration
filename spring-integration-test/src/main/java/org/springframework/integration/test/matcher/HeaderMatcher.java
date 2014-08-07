@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,9 @@ import org.hamcrest.Factory;
 import org.hamcrest.Matcher;
 import org.junit.Assert;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHeaders;
 
 /**
  * Are the {@link MessageHeaders} of a {@link Message} containing any entry
@@ -34,7 +35,6 @@ import org.springframework.integration.MessageHeaders;
  * <p>
  * For example using {@link Assert#assertThat(Object, Matcher)} for a single
  * entry:
- * <p>
  *
  * <pre class="code">
  * {@code
@@ -48,7 +48,6 @@ import org.springframework.integration.MessageHeaders;
  * </pre>
  * <p>
  * For multiple entries to match all:
- * <p>
  * <pre class="code">
  * {@code
  * Map<String, Object> expectedInHeaderMap = new HashMap<String, Object>();
@@ -60,7 +59,6 @@ import org.springframework.integration.MessageHeaders;
  *
  * <p>
  * For a single key:
- * <p>
  *
  * <pre class="code">
  * ANY_HEADER_KEY = "foo";
@@ -95,6 +93,7 @@ public class HeaderMatcher extends TypeSafeMatcher<Message<?>> {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void describeTo(Description description) {
 		description.appendText("a Message with Headers containing ").appendDescriptionOf(matcher);
 	}
@@ -126,7 +125,7 @@ public class HeaderMatcher extends TypeSafeMatcher<Message<?>> {
 
 	@Factory
 	public static <T> Matcher<Message<?>> hasCorrelationId(T value) {
-		return new HeaderMatcher(MapContentMatchers.hasEntry(MessageHeaders.CORRELATION_ID, value));
+		return new HeaderMatcher(MapContentMatchers.hasEntry(IntegrationMessageHeaderAccessor.CORRELATION_ID, value));
 	}
 
 	@Factory
@@ -136,7 +135,7 @@ public class HeaderMatcher extends TypeSafeMatcher<Message<?>> {
 
 	@Factory
 	public static Matcher<Message<?>> hasSequenceNumber(Matcher<Integer> matcher) {
-		return new HeaderMatcher(MapContentMatchers.hasEntry(MessageHeaders.SEQUENCE_NUMBER, matcher));
+		return new HeaderMatcher(MapContentMatchers.hasEntry(IntegrationMessageHeaderAccessor.SEQUENCE_NUMBER, matcher));
 	}
 
 	@Factory
@@ -146,7 +145,7 @@ public class HeaderMatcher extends TypeSafeMatcher<Message<?>> {
 
 	@Factory
 	public static Matcher<Message<?>> hasSequenceSize(Matcher<Integer> value) {
-		return new HeaderMatcher(MapContentMatchers.hasEntry(MessageHeaders.SEQUENCE_SIZE, value));
+		return new HeaderMatcher(MapContentMatchers.hasEntry(IntegrationMessageHeaderAccessor.SEQUENCE_SIZE, value));
 	}
 
 	@Factory
@@ -156,7 +155,7 @@ public class HeaderMatcher extends TypeSafeMatcher<Message<?>> {
 
 	@Factory
 	public static Matcher<Message<?>> hasExpirationDate(Matcher<Long> matcher) {
-		return new HeaderMatcher(MapContentMatchers.hasEntry(MessageHeaders.EXPIRATION_DATE, matcher));
+		return new HeaderMatcher(MapContentMatchers.hasEntry(IntegrationMessageHeaderAccessor.EXPIRATION_DATE, matcher));
 	}
 
 	@Factory

@@ -74,12 +74,65 @@
     channel="target" data-source="dataSource"
     update="update item set status=10 where id in (:id)" />]]></programlisting>
     <note>
-         The parameters in the update query are specified with a colon (:) prefix to the name of a parameter (which in this case is an expression to be applied to each of the rows in the polled result set). This is a standard feature of the named parameter JDBC support in Spring JDBC combined with a convention (projection onto the polled result list) adopted in Spring Integration. The underlying Spring JDBC features limit the available expressions (e.g. most special characters other than period are disallowed), but since the target is usually a list of or an individual object addressable by simple bean paths this isn't unduly restrictive.
-      </note> To change the parameter generation strategy you can inject a
+         The parameters in the update query are specified with a colon (:)
+		prefix to the name of a parameter (which in this case is an expression
+		to be applied to each of the rows in the polled result set).
+		This is a standard feature of the named parameter JDBC support in Spring JDBC
+		combined with a convention (projection onto the polled result list)
+		adopted in Spring Integration.
+		The underlying Spring JDBC features limit the available expressions
+		(e.g. most special characters other than period are disallowed),
+		but since the target is usually a list of or an individual object addressable by simple bean paths this isn't unduly restrictive.
+      </note>
+		To change the parameter generation strategy you can inject a
     <classname>SqlParameterSourceFactory</classname> into the adapter to
     override the default behavior (the adapter has a
-    <code>sql-parameter-source-factory</code> attribute).</para>
+    <code>sql-parameter-source-factory</code> attribute). Spring Integration
+    provides a <classname>ExpressionEvaluatingSqlParameterSourceFactory</classname> which
+    will create a SpEL-based parameter source, with the results of the query as the
+    <code>#root</code> object. (If <code>update-per-row</code> is true, the root object
+    is the row). If the same parameter name appears multiple times in the update query, it
+    is evaluated only one time, and its result is cached.
+    </para>
 
+	<para>
+		You can also use a parameter source for the select query. In this case, since there is no "result"
+		object to evaluate against, a single parameter source is used each time (rather than using a
+		parameter source factory). Starting with <emphasis>version 4.0</emphasis>, you can use Spring
+		to create a SpEL based parameter source as follows:
+	</para>
+	<programlisting language="xml"><![CDATA[<int-jdbc:inbound-channel-adapter query="select * from item where status=:status"
+	channel="target" data-source="dataSource"
+	select-sql-parameter-source="parameterSource" />
+
+<bean id="parameterSource" factory-bean="parameterSourceFactory"
+			factory-method="createParameterSourceNoCache">
+	<constructor-arg value="" />
+</bean>
+
+<bean id="parameterSourceFactory"
+		class="o.s.integration.jdbc.ExpressionEvaluatingSqlParameterSourceFactory">
+	<property name="parameterExpressions">
+		<map>
+			<entry key="status" value="@statusBean.which()" />
+		</map>
+	</property>
+</bean>
+
+<bean id="statusBean" class="foo.StatusDetermination" />]]></programlisting>
+
+	<para>
+		The <code>value</code> in each parameter expression can be any valid SpEL expression.
+		The <code>#root</code> object for the expression evaluation is the
+		constructor argument defined on the <code>parameterSource</code> bean. It is static
+		for all evaluations (in this case, an empty String).
+	</para>
+	<important>
+		Use the <code>createParameterSourceNoCache</code> factory method; otherwise the parameter source will
+		cache the result of the evaluation. Also note that, because caching is disabled, if the same
+		parameter name appears in the select query multiple times, it will be re-evaluated for each
+		occurrence.
+	</important>
     <section>
       <title>Polling and Transactions</title>
 
@@ -355,7 +408,7 @@
 			For more information, please see:
 			</para>
 			<para>
-				<ulink url="http://dev.mysql.com/doc/refman/5.6/en/fractional-seconds.html"></ulink>
+				<ulink url="http://dev.mysql.com/doc/refman/5.6/en/fractional-seconds.html"/>
 			</para>
 			<para>
 				Also important, please ensure that you use an up-to-date version
@@ -367,16 +420,12 @@
 	<section id="jdbc-message-store-channels">
 		<title>Backing Message Channels</title>
 		<para>
-			If you intent backing <emphasis>Message Channels</emphasis> using JDBC,
+			If you intend backing <emphasis>Message Channels</emphasis> using JDBC,
 			it is recommended to use the provided <classname>JdbcChannelMessageStore</classname>
-			implementation instead. It can only be used in conjuntion
+			implementation instead. It can only be used in conjunction
 			with <emphasis>Message Channels</emphasis>.
 		</para>
-		<note>
-			The provided <classname>JdbcChannelMessageStore</classname>
-			implementation is available since <emphasis>Spring Integration 2.2.</emphasis>.
-		</note>
-		<para><emphasis>Supported Database</emphasis></para>
+		<para><emphasis role="bold">Supported Databases</emphasis></para>
 		<para>
 			The <classname>JdbcChannelMessageStore</classname> uses database specific
 			SQL queries to retrieve messages from the database. Therefore, users must
@@ -398,19 +447,27 @@
 			the <classname>AbstractChannelMessageStoreQueryProvider</classname>
 			class and provide your own custom queries.
 		</para>
+		<para>
+			Since <emphasis>version 4.0</emphasis>, the <code>MESSAGE_SEQUENCE</code> column has been
+			added to the table to ensure first-in-first-out (FIFO) queueing even when messages are
+			stored in the same millisecond.
+		</para>
 		<important>
 			<para>
-				Generally it is not recommened to use a relational database for the
+				Generally it is not recommended to use a relational database for the
 				purpose of queuing. Instead, if possible, consider using either JMS or
-				AMQP, for which message store implementation are provided as well. For
+				AMQP backed channels instead. For
 				further reference please see the following resources:
 			</para>
 			<itemizedlist>
-				<listitem><ulink url="https://www.engineyard.com/blog/2011/5-subtle-ways-youre-using-mysql-as-a-queue-and-why-itll-bite-you/">5 subtle ways you’re using MySQL as a queue, and why it’ll bite you</ulink></listitem>
-				<listitem><ulink url="http://mikehadlow.blogspot.com/2012/04/database-as-queue-anti-pattern.html">The Database As Queue Anti-Pattern</ulink></listitem>
+				<listitem><ulink url=
+					"https://www.engineyard.com/blog/2011/5-subtle-ways-youre-using-mysql-as-a-queue-and-why-itll-bite-you/"
+					>5 subtle ways you’re using MySQL as a queue, and why it’ll bite you</ulink>.</listitem>
+				<listitem><ulink url="http://mikehadlow.blogspot.com/2012/04/database-as-queue-anti-pattern.html"
+					>The Database As Queue Anti-Pattern</ulink>.</listitem>
 			</itemizedlist>
 		</important>
-		<para><emphasis>Concurrent Polling</emphasis></para>
+		<para><emphasis role="bold">Concurrent Polling</emphasis></para>
 		<para>
 			When polling a <emphasis>Message Channel</emphasis>, you have the option
 			to configure the associated <classname>Poller</classname> with a
@@ -467,7 +524,46 @@
 
 <int:channel id="outputChannel" />
 …]]></programlisting>
+	<para>
+		<emphasis role="bold">Priority Channel</emphasis>
+		<para>
+			Starting with <emphasis>version 4.0</emphasis>, the <classname>JdbcChannelMessageStore</classname>
+			implements <interfacename>PriorityCapableChannelMessageStore</interfacename> and provides the
+			<code>priorityEnabled</code> option allowing it to be used as a <code>message-store</code>
+			reference for <code>priority-queue</code>s. For this purpose, the <code>INT_CHANNEL_MESSAGE</code>
+			has a <code>MESSAGE_PRIORITY</code> column to store the value of <code>PRIORITY</code> Message header.
+			In addition, a new <code>MESSAGE_SEQUENCE</code> column is also provided to achieve a robust first-in-first-out
+			(FIFO) polling mechanism, even when multiple messages are stored with the same priority
+			in the same millisecond. Messages are polled (selected) from the database with
+			<code>order by MESSAGE_PRIORITY DESC NULLS LAST, CREATED_DATE, MESSAGE_SEQUENCE</code>.
+		</para>
+		<note>
+			<para>
+				It's not recommended to use the same <classname>JdbcChannelMessageStore</classname> bean
+				for priority and non-priority queue channel, because <code>priorityEnabled</code> option applies to the
+				entire store and proper FIFO queue semantics will not be retained for the queue channel.
+				However the same <code>INT_CHANNEL_MESSAGE</code> table, and even <code>region</code>, can be used for both
+				<classname>JdbcChannelMessageStore</classname> types. To configure that scenario, simply
+				extend one message store bean from the other:
+			</para>
+		</note>
+		<programlisting language="xml"><![CDATA[<bean id="channelStore" class="o.s.i.jdbc.store.JdbcChannelMessageStore">
+    <property name="dataSource" ref="dataSource"/>
+    <property name="channelMessageStoreQueryProvider" ref="queryProvider"/>
+</bean>
 
+<int:channel id="queueChannel">
+    <int:queue message-store="store"/>
+</int:channel>
+
+<bean id="priorityStore" parent="channelStore">
+    <property name="priorityEnabled" value="true"/>
+</bean>
+
+<int:channel id="priorityChannel">
+    <int:priority-queue message-store="priorityStore"/>
+</int:channel>]]></programlisting>
+	</para>
 	</section>
     <section>
       <title>Initializing the Database</title>

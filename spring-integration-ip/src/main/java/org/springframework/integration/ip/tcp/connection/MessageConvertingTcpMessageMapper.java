@@ -15,9 +15,9 @@
  */
 package org.springframework.integration.ip.tcp.connection;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.support.MessageBuilder;
-import org.springframework.integration.support.converter.MessageConverter;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.converter.MessageConverter;
 import org.springframework.util.Assert;
 
 /**
@@ -35,11 +35,11 @@ public class MessageConvertingTcpMessageMapper extends TcpMessageMapper {
 	}
 
 	@Override
-	public Message<Object> toMessage(TcpConnection connection) throws Exception {
+	public Message<?> toMessage(TcpConnection connection) throws Exception {
 		Object data = connection.getPayload();
 		if (data != null) {
-			Message<Object> message = this.messageConverter.toMessage(data);
-			MessageBuilder<Object> messageBuilder = MessageBuilder.fromMessage(message);
+			Message<?> message = this.messageConverter.toMessage(data, null);
+			AbstractIntegrationMessageBuilder<?> messageBuilder = this.getMessageBuilderFactory().fromMessage(message);
 			this.addStandardHeaders(connection, messageBuilder);
 			this.addCustomHeaders(connection, messageBuilder);
 			return messageBuilder.build();
@@ -54,7 +54,7 @@ public class MessageConvertingTcpMessageMapper extends TcpMessageMapper {
 
 	@Override
 	public Object fromMessage(Message<?> message) throws Exception {
-		return this.messageConverter.fromMessage(message);
+		return this.messageConverter.fromMessage(message, Object.class);
 	}
 
 }

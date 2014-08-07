@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,8 @@ import org.w3c.dom.Element;
 
 import org.springframework.beans.MutablePropertyValues;
 import org.springframework.beans.factory.BeanDefinitionStoreException;
-import org.springframework.beans.factory.config.BeanDefinitionHolder;
 import org.springframework.beans.factory.config.TypedStringValue;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
-import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionReaderUtils;
 import org.springframework.beans.factory.xml.AbstractBeanDefinitionParser;
 import org.springframework.beans.factory.xml.ParserContext;
@@ -32,8 +30,8 @@ import org.springframework.util.StringUtils;
 
 /**
  * Base parser for Channel Adapters.
- * <p/>
- * Includes logic to determine {@link org.springframework.integration.MessageChannel}:
+ * <p>
+ * Includes logic to determine {@link org.springframework.messaging.MessageChannel}:
  * if 'channel' attribute is defined - uses its value as 'channelName';
  * if 'id' attribute is defined - creates {@link DirectChannel} at runtime and uses id's value as 'channelName';
  * if current component is defined as nested element inside any other components e.g. &lt;chain&gt;
@@ -82,20 +80,18 @@ public abstract class AbstractChannelAdapterParser extends AbstractBeanDefinitio
 		if (parserContext.isNested()) {
 			return null;
 		}
-		String channelId = element.getAttribute(ID_ATTRIBUTE);
-		if (!StringUtils.hasText(channelId)) {
-			parserContext.getReaderContext().error("The channel-adapter's 'id' attribute is required when no 'channel' "
-					+ "reference has been provided, because that 'id' would be used for the created channel.", element);
-		}
-		BeanDefinitionBuilder channelBuilder = BeanDefinitionBuilder.genericBeanDefinition(DirectChannel.class);
-		BeanDefinitionHolder holder = new BeanDefinitionHolder(channelBuilder.getBeanDefinition(), channelId);
-		BeanDefinitionReaderUtils.registerBeanDefinition(holder, parserContext.getRegistry());
-		return channelId;
+
+		return IntegrationNamespaceUtils.createDirectChannel(element, parserContext);
 	}
 
 	/**
 	 * Subclasses must implement this method to parse the adapter element.
 	 * The name of the MessageChannel bean is provided.
+	 *
+	 * @param element The element.
+	 * @param parserContext The parser context.
+	 * @param channelName The channel name.
+	 * @return The bean definition.
 	 */
 	protected abstract AbstractBeanDefinition doParse(Element element, ParserContext parserContext, String channelName);
 

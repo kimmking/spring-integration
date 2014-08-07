@@ -33,16 +33,16 @@ import org.junit.runner.RunWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageHandler;
-import org.springframework.integration.core.PollableChannel;
 import org.springframework.integration.handler.advice.AbstractRequestHandlerAdvice;
 import org.springframework.integration.jmx.OperationInvokingMessageHandler;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -126,13 +126,13 @@ public class OperationInvokingOutboundGatewayTests {
 			assertThat(e, Matchers.instanceOf(MessagingException.class));
 			assertThat(e.getMessage(), Matchers.containsString("failed to find JMX operation"));
 		}
-		// TODO: Uncomment when Spring Framework minimum is 3.2.3
-//		argMap = new HashMap<String, Object>();
-//		argMap.put("bool", true);
-//		argMap.put("time", 0L);
-//		argMap.put("foo", 42);
-//		primitiveChannel.send(new GenericMessage<Map<String, Object>>(argMap));
-//		assertEquals(4, testBean.messages.size());
+		// Args are named starting with Spring 3.2.3
+		argMap = new HashMap<String, Object>();
+		argMap.put("bool", true);
+		argMap.put("time", 0L);
+		argMap.put("foo", 42);
+		primitiveChannel.send(new GenericMessage<Map<String, Object>>(argMap));
+		assertEquals(4, testBean.messages.size());
 	}
 
 	@Test

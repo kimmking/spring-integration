@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,23 +32,25 @@ import java.util.Properties;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.config.PropertiesFactoryBean;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.integration.Message;
 import org.springframework.integration.metadata.SimpleMetadataStore;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
 import org.springframework.social.twitter.api.SearchMetadata;
 import org.springframework.social.twitter.api.SearchOperations;
+import org.springframework.social.twitter.api.SearchParameters;
 import org.springframework.social.twitter.api.SearchResults;
 import org.springframework.social.twitter.api.Tweet;
 import org.springframework.social.twitter.api.Twitter;
-import org.springframework.social.twitter.api.impl.SearchParameters;
 import org.springframework.social.twitter.api.impl.TwitterTemplate;
 
 
 /**
  * @author Oleg Zhurakousky
  * @author Gunnar Hillert
+ * @author Gary Russell
  */
 public class SearchReceivingMessageSourceTests {
 
@@ -93,6 +95,7 @@ public class SearchReceivingMessageSourceTests {
 		assertNull(metadataStore);
 		assertNotNull(metadataKey);
 
+		messageSource.setBeanFactory(mock(BeanFactory.class));
 		messageSource.afterPropertiesSet();
 
 		final Object metadataStoreInitialized = TestUtils.getPropertyValue(messageSource, "metadataStore");

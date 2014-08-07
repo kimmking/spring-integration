@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,11 +26,11 @@ import java.net.SocketTimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHeaders;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.ip.AbstractInternetProtocolReceivingChannelAdapter;
 import org.springframework.integration.ip.IpHeaders;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.MessagingException;
 
 /**
  * A channel adapter to receive incoming UDP packets. Packets can optionally be preceded by a
@@ -53,11 +53,11 @@ public class UnicastReceivingChannelAdapter extends AbstractInternetProtocolRece
 
 	/**
 	 * Constructs a UnicastReceivingChannelAdapter that listens on the specified port.
-	 * @param port
+	 * @param port The port.
 	 */
 	public UnicastReceivingChannelAdapter(int port) {
 		super(port);
-		mapper.setLengthCheck(false);
+		this.mapper.setLengthCheck(false);
 	}
 
 	/**
@@ -69,10 +69,16 @@ public class UnicastReceivingChannelAdapter extends AbstractInternetProtocolRece
 	 */
 	public UnicastReceivingChannelAdapter(int port, boolean lengthCheck) {
 		super(port);
-		mapper.setLengthCheck(lengthCheck);
+		this.mapper.setLengthCheck(lengthCheck);
 	}
 
+	@Override
+	protected void onInit() {
+		super.onInit();
+		this.mapper.setBeanFactory(this.getBeanFactory());
+	}
 
+	@Override
 	public void run() {
 		if (logger.isDebugEnabled()) {
 			logger.debug("UDP Receiver running on port:" + this.getPort());
@@ -90,7 +96,7 @@ public class UnicastReceivingChannelAdapter extends AbstractInternetProtocolRece
 				// continue
 			}
 			catch (SocketException e) {
-				doStop();
+				this.stop();
 			}
 			catch (Exception e) {
 				if (e instanceof MessagingException) {
@@ -133,6 +139,7 @@ public class UnicastReceivingChannelAdapter extends AbstractInternetProtocolRece
 
 	protected boolean asyncSendMessage(final DatagramPacket packet) {
 		this.getTaskExecutor().execute(new Runnable(){
+			@Override
 			public void run() {
 				Message<byte[]> message = null;
 				try {
@@ -197,8 +204,8 @@ public class UnicastReceivingChannelAdapter extends AbstractInternetProtocolRece
 	/**
 	 * Sets timeout and receive buffer size
 	 *
-	 * @param socket
-	 * @throws SocketException
+	 * @param socket The socket.
+	 * @throws SocketException Any socket exception.
 	 */
 	protected void setSocketAttributes(DatagramSocket socket)
 			throws SocketException {
@@ -222,6 +229,7 @@ public class UnicastReceivingChannelAdapter extends AbstractInternetProtocolRece
 		}
 	}
 
+	@Override
 	public void setSoSendBufferSize(int soSendBufferSize) {
 		this.soSendBufferSize = soSendBufferSize;
 	}

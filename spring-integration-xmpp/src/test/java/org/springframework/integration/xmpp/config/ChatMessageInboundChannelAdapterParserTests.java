@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,18 +22,18 @@ import static org.junit.Assert.assertSame;
 
 import java.lang.reflect.Field;
 
-import org.jivesoftware.smack.Chat;
-import org.jivesoftware.smack.ChatManager;
 import org.jivesoftware.smack.PacketListener;
+import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smackx.jiveproperties.JivePropertiesManager;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
-import org.springframework.integration.MessageChannel;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.integration.channel.QueueChannel;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.integration.xmpp.inbound.ChatMessageListeningEndpoint;
@@ -47,6 +47,7 @@ import org.springframework.util.ReflectionUtils;
  * @author Oleg Zhurakousky
  * @author Mark Fisher
  * @author Gunnar Hillert
+ * @author Florian Schmaus
  */
 @ContextConfiguration
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -78,12 +79,8 @@ public class ChatMessageInboundChannelAdapterParserTests {
 	}
 
 	@Test
-	public void testInboundAdapterUsageWithHeaderMapper() {
+	public void testInboundAdapterUsageWithHeaderMapper() throws NotConnectedException {
 		XMPPConnection xmppConnection = Mockito.mock(XMPPConnection.class);
-		ChatManager chatManager = Mockito.mock(ChatManager.class);
-		Mockito.when(xmppConnection.getChatManager()).thenReturn(chatManager);
-		Chat chat = Mockito.mock(Chat.class);
-		Mockito.when(chatManager.getThreadChat(Mockito.any(String.class))).thenReturn(chat);
 
 		ChatMessageListeningEndpoint adapter = context.getBean("xmppInboundAdapter", ChatMessageListeningEndpoint.class);
 
@@ -96,10 +93,10 @@ public class ChatMessageInboundChannelAdapterParserTests {
 		Message message = new Message();
 		message.setBody("hello");
 		message.setTo("oleg");
-		message.setProperty("foo", "foo");
-		message.setProperty("bar", "bar");
+		JivePropertiesManager.addProperty(message, "foo", "foo");
+		JivePropertiesManager.addProperty(message, "bar", "bar");
 		packetListener.processPacket(message);
-		org.springframework.integration.Message<?> siMessage = xmppInbound.receive(0);
+		org.springframework.messaging.Message<?> siMessage = xmppInbound.receive(0);
 		assertEquals("foo", siMessage.getHeaders().get("foo"));
 		assertEquals("oleg", siMessage.getHeaders().get("xmpp_to"));
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import java.lang.annotation.Target;
  * Indicates that a method is capable of handling a message or message payload.
  * <p>
  * A method annotated with @ServiceActivator may accept a parameter of type
- * {@link org.springframework.integration.Message} or of the expected
+ * {@link org.springframework.messaging.Message} or of the expected
  * Message payload's type. Any type conversion supported by
  * {@link org.springframework.beans.SimpleTypeConverter} will be applied to
  * the Message payload if necessary. Header values can also be passed as
@@ -39,8 +39,9 @@ import java.lang.annotation.Target;
  *
  * @author Mark Fisher
  * @author Gary Russell
+ * @author Artem Bilan
  */
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
@@ -50,6 +51,23 @@ public @interface ServiceActivator {
 
 	String outputChannel() default "";
 
+	String requiresReply() default "";
+
 	String[] adviceChain() default {};
 
+	/*
+	 {@code SmartLifecycle} options.
+	 Can be specified as 'property placeholder', e.g. {@code ${foo.autoStartup}}.
+	 */
+	String autoStartup() default "true";
+
+	String phase() default "0";
+
+	/**
+	 * @return the {@link Poller} options for a polled endpoint
+	 * ({@link org.springframework.integration.scheduling.PollerMetadata}).
+	 * This attribute is an {@code array} just to allow an empty default (no poller).
+	 * Only one {@link Poller} element is allowed.
+	 */
+	Poller[] poller() default {};
 }

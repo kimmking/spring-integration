@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.SimpleTypeConverter;
 import org.springframework.beans.TypeConverter;
 import org.springframework.beans.factory.BeanClassLoaderAware;
+import org.springframework.beans.factory.BeanDefinitionStoreException;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.core.convert.ConversionService;
@@ -41,19 +42,23 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.support.TaskExecutorAdapter;
 import org.springframework.expression.Expression;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessagingException;
+import org.springframework.expression.common.LiteralExpression;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.integration.annotation.Gateway;
+import org.springframework.integration.annotation.GatewayHeader;
 import org.springframework.integration.annotation.Payload;
-import org.springframework.integration.context.IntegrationContextUtils;
 import org.springframework.integration.endpoint.AbstractEndpoint;
 import org.springframework.integration.history.TrackableComponent;
 import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
-import org.springframework.integration.support.channel.ChannelResolver;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.core.DestinationResolver;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.ObjectUtils;
 import org.springframework.util.ReflectionUtils;
 import org.springframework.util.StringUtils;
 
@@ -62,14 +67,17 @@ import org.springframework.util.StringUtils;
  * with messaging components without application code being aware of them allowing
  * for POJO-style interaction.
  * This component is also aware of the {@link ConversionService} set on the enclosing {@link BeanFactory}
- * under the name {@link IntegrationContextUtils#INTEGRATION_CONVERSION_SERVICE_BEAN_NAME} to
+ * under the name {@link IntegrationUtils#INTEGRATION_CONVERSION_SERVICE_BEAN_NAME} to
  * perform type conversions when necessary (thanks to Jon Schneider's contribution and suggestion in INT-1230).
  *
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  * @author Gary Russell
+ * @author Artem Bilan
  */
 public class GatewayProxyFactoryBean extends AbstractEndpoint implements TrackableComponent, FactoryBean<Object>, MethodInterceptor, BeanClassLoaderAware {
+
+	private static final SpelExpressionParser PARSER = new SpelExpressionParser();
 
 	private volatile Class<?> serviceInterface;
 
@@ -83,7 +91,7 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 
 	private volatile Long defaultReplyTimeout;
 
-	private volatile ChannelResolver channelResolver;
+	private volatile DestinationResolver<MessageChannel> channelResolver;
 
 	private volatile boolean shouldTrack = false;
 
@@ -126,6 +134,8 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 	/**
 	 * Set the interface class that the generated proxy should implement.
 	 * If none is provided explicitly, the default is {@link RequestReplyExchanger}.
+	 *
+	 * @param serviceInterface The service interface.
 	 */
 	public void setServiceInterface(Class<?> serviceInterface) {
 		Assert.notNull(serviceInterface, "'serviceInterface' must not be null");
@@ -137,7 +147,7 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 	 * Set the default request channel.
 	 *
 	 * @param defaultRequestChannel the channel to which request messages will
-	 * be sent if no request channel has been configured with an annotation
+	 * be sent if no request channel has been configured with an annotation.
 	 */
 	public void setDefaultRequestChannel(MessageChannel defaultRequestChannel) {
 		this.defaultRequestChannel = defaultRequestChannel;
@@ -159,6 +169,8 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 	 * Set the error channel. If no error channel is provided, this gateway will
 	 * propagate Exceptions to the caller. To completely suppress Exceptions, provide
 	 * a reference to the "nullChannel" here.
+	 *
+	 * @param errorChannel The error channel.
 	 */
 	public void setErrorChannel(MessageChannel errorChannel) {
 		this.errorChannel = errorChannel;
@@ -170,7 +182,7 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 	 *
 	 * @param defaultRequestTimeout the timeout value in milliseconds
 	 */
-	public void setDefaultRequestTimeout(long defaultRequestTimeout) {
+	public void setDefaultRequestTimeout(Long defaultRequestTimeout) {
 		this.defaultRequestTimeout = defaultRequestTimeout;
 	}
 
@@ -180,10 +192,11 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 	 *
 	 * @param defaultReplyTimeout the timeout value in milliseconds
 	 */
-	public void setDefaultReplyTimeout(long defaultReplyTimeout) {
+	public void setDefaultReplyTimeout(Long defaultReplyTimeout) {
 		this.defaultReplyTimeout = defaultReplyTimeout;
 	}
 
+	@Override
 	public void setShouldTrack(boolean shouldTrack) {
 		this.shouldTrack = shouldTrack;
 		if (!CollectionUtils.isEmpty(this.gatewayMap)) {
@@ -212,6 +225,7 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 		this.globalMethodMetadata = globalMethodMetadata;
 	}
 
+	@Override
 	public void setBeanClassLoader(ClassLoader beanClassLoader) {
 		this.beanClassLoader = beanClassLoader;
 	}
@@ -254,10 +268,12 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 		return this.serviceInterface;
 	}
 
+	@Override
 	public Class<?> getObjectType() {
 		return (this.serviceInterface != null ? this.serviceInterface : null);
 	}
 
+	@Override
 	public Object getObject() throws Exception {
 		if (this.serviceProxy == null) {
 			this.onInit();
@@ -266,10 +282,12 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 		return this.serviceProxy;
 	}
 
+	@Override
 	public boolean isSingleton() {
 		return true;
 	}
 
+	@Override
 	public Object invoke(final MethodInvocation invocation) throws Throwable {
 		if (Future.class.isAssignableFrom(invocation.getMethod().getReturnType())) {
 			return this.asyncExecutor.submit(new AsyncInvocationTask(invocation));
@@ -358,7 +376,7 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 		Long replyTimeout = this.defaultReplyTimeout;
 		String payloadExpression = this.globalMethodMetadata != null ? this.globalMethodMetadata.getPayloadExpression()
 				: null;
-		Map<String, Expression> headerExpressions = null;
+		Map<String, Expression> headerExpressions = new HashMap<String, Expression>();
 		if (gatewayAnnotation != null) {
 			String requestChannelName = gatewayAnnotation.requestChannel();
 			if (StringUtils.hasText(requestChannelName)) {
@@ -381,12 +399,34 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 			if (replyTimeout == null || gatewayAnnotation.replyTimeout() != Long.MIN_VALUE) {
 				replyTimeout = gatewayAnnotation.replyTimeout();
 			}
+			if (payloadExpression == null || StringUtils.hasText(gatewayAnnotation.payloadExpression())) {
+				payloadExpression = gatewayAnnotation.payloadExpression();
+			}
+
+			if (!ObjectUtils.isEmpty(gatewayAnnotation.headers())) {
+				for (GatewayHeader gatewayHeader : gatewayAnnotation.headers()) {
+					String value = gatewayHeader.value();
+					String expression = gatewayHeader.expression();
+					String name = gatewayHeader.name();
+					boolean hasValue = StringUtils.hasText(value);
+
+					if (!(hasValue ^ StringUtils.hasText(expression))) {
+						throw new BeanDefinitionStoreException("exactly one of 'value' or 'expression' is required on a gateway's header.");
+					}
+					headerExpressions.put(name, hasValue ? new LiteralExpression(value): PARSER.parseExpression(expression));
+				}
+			}
+
 		}
 		else if (methodMetadataMap != null && methodMetadataMap.size() > 0) {
 			GatewayMethodMetadata methodMetadata = methodMetadataMap.get(method.getName());
 			if (methodMetadata != null) {
-				payloadExpression = methodMetadata.getPayloadExpression();
-				headerExpressions = methodMetadata.getHeaderExpressions();
+				if (StringUtils.hasText(methodMetadata.getPayloadExpression())) {
+					payloadExpression = methodMetadata.getPayloadExpression();
+				}
+				if (!CollectionUtils.isEmpty(methodMetadata.getHeaderExpressions())) {
+					headerExpressions.putAll(methodMetadata.getHeaderExpressions());
+				}
 				String requestChannelName = methodMetadata.getRequestChannelName();
 				if (StringUtils.hasText(requestChannelName)) {
 					requestChannel = this.resolveChannelName(requestChannelName);
@@ -407,7 +447,7 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 		}
 		GatewayMethodInboundMessageMapper messageMapper = new GatewayMethodInboundMessageMapper(method, headerExpressions,
 				this.globalMethodMetadata != null ? this.globalMethodMetadata.getHeaderExpressions() : null,
-				this.argsMapper);
+				this.argsMapper, this.getMessageBuilderFactory());
 		if (StringUtils.hasText(payloadExpression)) {
 			messageMapper.setPayloadExpression(payloadExpression);
 		}
@@ -444,7 +484,7 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 
 	private MessageChannel resolveChannelName(String channelName) {
 		Assert.state(this.channelResolver != null, "ChannelResolver is required");
-		MessageChannel channel = this.channelResolver.resolveChannelName(channelName);
+		MessageChannel channel = this.channelResolver.resolveDestination(channelName);
 		Assert.notNull(channel, "failed to resolve channel '" + channelName + "'");
 		return channel;
 	}
@@ -514,6 +554,7 @@ public class GatewayProxyFactoryBean extends AbstractEndpoint implements Trackab
 			this.invocation = invocation;
 		}
 
+		@Override
 		public Object call() throws Exception {
 			try {
 				return doInvoke(this.invocation);

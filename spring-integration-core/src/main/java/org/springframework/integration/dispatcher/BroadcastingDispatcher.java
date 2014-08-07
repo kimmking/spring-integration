@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,16 @@ package org.springframework.integration.dispatcher;
 import java.util.Collection;
 import java.util.concurrent.Executor;
 
-import org.springframework.integration.Message;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.integration.MessageDispatchingException;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageHandler;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessagingException;
 
 /**
  * A broadcasting dispatcher implementation. If the 'ignoreFailures' property is set to <code>false</code> (the
@@ -40,7 +45,7 @@ import org.springframework.integration.support.MessageBuilder;
  * @author Gary Russell
  * @author Oleg Zhurakousky
  */
-public class BroadcastingDispatcher extends AbstractDispatcher {
+public class BroadcastingDispatcher extends AbstractDispatcher implements BeanFactoryAware {
 
 	private final boolean requireSubscribers;
 
@@ -51,6 +56,9 @@ public class BroadcastingDispatcher extends AbstractDispatcher {
 	private final Executor executor;
 
 	private volatile int minSubscribers;
+
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
 
 	public BroadcastingDispatcher() {
 		this(null, false);
@@ -78,6 +86,8 @@ public class BroadcastingDispatcher extends AbstractDispatcher {
 	 * one throws an Exception. Since the Executor is most likely using a different thread, this flag would only affect
 	 * whether an error Message is sent to the error channel or not in the case that such an Executor has been
 	 * configured.
+	 *
+	 * @param ignoreFailures true when failures are to be ignored.
 	 */
 	public void setIgnoreFailures(boolean ignoreFailures) {
 		this.ignoreFailures = ignoreFailures;
@@ -85,7 +95,9 @@ public class BroadcastingDispatcher extends AbstractDispatcher {
 
 	/**
 	 * Specify whether to apply sequence numbers to the messages prior to sending to the handlers. By default, sequence
-	 * numbers will <em>not</em> be applied
+	 * numbers will <em>not</em> be applied.
+	 *
+	 * @param applySequence true when sequence information should be applied.
 	 */
 	public void setApplySequence(boolean applySequence) {
 		this.applySequence = applySequence;
@@ -100,6 +112,12 @@ public class BroadcastingDispatcher extends AbstractDispatcher {
 		this.minSubscribers = minSubscribers;
 	}
 
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(beanFactory);
+	}
+
+	@Override
 	public boolean dispatch(Message<?> message) {
 		int dispatched = 0;
 		int sequenceNumber = 1;
@@ -109,10 +127,11 @@ public class BroadcastingDispatcher extends AbstractDispatcher {
 		}
 		int sequenceSize = handlers.size();
 		for (final MessageHandler handler : handlers) {
-			final Message<?> messageToSend = (!this.applySequence) ? message : MessageBuilder.fromMessage(message)
+			final Message<?> messageToSend = (!this.applySequence) ? message : this.messageBuilderFactory.fromMessage(message)
 					.pushSequenceDetails(message.getHeaders().getId(), sequenceNumber++, sequenceSize).build();
 			if (this.executor != null) {
 				this.executor.execute(new Runnable() {
+					@Override
 					public void run() {
 						invokeHandler(handler, messageToSend);
 					}
@@ -144,7 +163,7 @@ public class BroadcastingDispatcher extends AbstractDispatcher {
 		catch (RuntimeException e) {
 			if (!this.ignoreFailures) {
 				if (e instanceof MessagingException && ((MessagingException) e).getFailedMessage() == null) {
-					((MessagingException) e).setFailedMessage(message);
+					throw new MessagingException(message, e);
 				}
 				throw e;
 			}

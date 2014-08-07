@@ -21,14 +21,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 
 import org.junit.Test;
-
 import org.springframework.beans.DirectFieldAccessor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.core.MessagingTemplate;
 import org.springframework.integration.rmi.RmiInboundGateway;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.integration.core.MessagingTemplate;
 
 /**
  * @author Mark Fisher

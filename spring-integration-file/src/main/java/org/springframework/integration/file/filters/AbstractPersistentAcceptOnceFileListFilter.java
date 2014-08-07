@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2013-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,9 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.integration.file.filters;
 
-import org.springframework.integration.metadata.MetadataStore;
+import java.util.List;
+
+import org.springframework.integration.metadata.ConcurrentMetadataStore;
 import org.springframework.util.Assert;
 
 /**
@@ -28,15 +31,16 @@ import org.springframework.util.Assert;
  * @since 3.0
  *
  */
-public abstract class AbstractPersistentAcceptOnceFileListFilter<F> extends AbstractFileListFilter<F> {
+public abstract class AbstractPersistentAcceptOnceFileListFilter<F> extends AbstractFileListFilter<F>
+		implements ReversibleFileListFilter<F> {
 
-	protected final MetadataStore store;
+	protected final ConcurrentMetadataStore store;
 
 	protected final String prefix;
 
 	private final Object monitor = new Object();
 
-	public AbstractPersistentAcceptOnceFileListFilter(MetadataStore store, String prefix) {
+	public AbstractPersistentAcceptOnceFileListFilter(ConcurrentMetadataStore store, String prefix) {
 		Assert.notNull(store, "'store' cannot be null");
 		Assert.notNull(prefix, "'prefix' cannot be null");
 		this.store = store;
@@ -47,13 +51,31 @@ public abstract class AbstractPersistentAcceptOnceFileListFilter<F> extends Abst
 	protected boolean accept(F file) {
 		String key = buildKey(file);
 		synchronized(monitor) {
-			String value = store.get(key);
-			if (value != null && isEqual(file, value)) {
-				return false;
+			String newValue = value(file);
+			String oldValue = this.store.putIfAbsent(key, newValue);
+			if (oldValue == null) { // not in store
+				return true;
 			}
-			store.put(key, value(file));
+			// same value in store
+			return !isEqual(file, oldValue) && this.store.replace(key, oldValue, newValue);
 		}
-		return true;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 * @since 4.0.4
+	 */
+	@Override
+	public void rollback(F file, List<F> files) {
+		boolean rollingBack = false;
+		for (F fileToRollback : files) {
+			if (fileToRollback.equals(file)) {
+				rollingBack = true;
+			}
+			if (rollingBack) {
+				this.store.remove(buildKey(fileToRollback));
+			}
+		}
 	}
 
 	/**
@@ -73,7 +95,7 @@ public abstract class AbstractPersistentAcceptOnceFileListFilter<F> extends Abst
 	 * @return true if equal.
 	 */
 	protected boolean isEqual(F file, String value) {
-		return Long.valueOf(value).longValue() == this.modified(file);
+		return Long.valueOf(value) == this.modified(file);
 	}
 
 	/**

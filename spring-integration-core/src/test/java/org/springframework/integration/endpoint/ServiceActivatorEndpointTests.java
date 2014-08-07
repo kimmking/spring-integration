@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,21 +20,27 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 
 import org.junit.Test;
+import org.mockito.Mockito;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.channel.QueueChannel;
 import org.springframework.integration.channel.TestChannelResolver;
 import org.springframework.integration.handler.ReplyRequiredException;
 import org.springframework.integration.handler.ServiceActivatingHandler;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Mark Fisher
  * @author Marius Bogoevici
+ * @author Artem Bilan
  */
 public class ServiceActivatorEndpointTests {
 
@@ -121,8 +127,8 @@ public class ServiceActivatorEndpointTests {
 		reply1 = replyChannel1.receive(0);
 		assertNull(reply1);
 		reply2 = replyChannel2.receive(0);
-		assertNotNull(reply2);	
-		assertEquals("foobar", reply2.getPayload());	
+		assertNotNull(reply2);
+		assertEquals("foobar", reply2.getPayload());
 	}
 
 	@Test
@@ -178,7 +184,7 @@ public class ServiceActivatorEndpointTests {
 				.setReplyChannel(replyChannel).build();
 		endpoint.handleMessage(message);
 		Message<?> reply = replyChannel.receive(500);
-		assertNull(reply.getHeaders().getCorrelationId());
+		assertNull(new IntegrationMessageHeaderAccessor(reply).getCorrelationId());
 	}
 
 	@Test
@@ -195,9 +201,20 @@ public class ServiceActivatorEndpointTests {
 				.setReplyChannel(replyChannel).build();
 		endpoint.handleMessage(message);
 		Message<?> reply = replyChannel.receive(500);
-		Object correlationId = reply.getHeaders().getCorrelationId();
+		Object correlationId = new IntegrationMessageHeaderAccessor(reply).getCorrelationId();
 		assertFalse(message.getHeaders().getId().equals(correlationId));
 		assertEquals("ABC-123", correlationId);
+	}
+
+	@Test
+	public void testBeanFactoryPopulation() {
+		ServiceActivatingHandler endpoint = this.createEndpoint();
+		BeanFactory mock = Mockito.mock(BeanFactory.class);
+		endpoint.setBeanFactory(mock);
+		endpoint.afterPropertiesSet();
+		Object beanFactory = TestUtils.getPropertyValue(endpoint, "processor.beanFactory");
+		assertNotNull(beanFactory);
+		assertSame(mock, beanFactory);
 	}
 
 

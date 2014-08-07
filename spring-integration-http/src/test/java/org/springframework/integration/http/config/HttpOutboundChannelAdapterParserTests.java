@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,21 @@
 
 package org.springframework.integration.http.config;
 
-import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.util.Map;
 
+import org.hamcrest.Matchers;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
 import org.springframework.beans.DirectFieldAccessor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -40,12 +43,13 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.integration.Message;
-import org.springframework.integration.core.MessageHandler;
+import org.springframework.integration.endpoint.PollingConsumer;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.integration.endpoint.AbstractEndpoint;
 import org.springframework.integration.handler.advice.AbstractRequestHandlerAdvice;
 import org.springframework.integration.http.outbound.HttpRequestExecutingMessageHandler;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.test.util.TestUtils;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -57,6 +61,8 @@ import org.springframework.web.client.RestTemplate;
  * @author Mark Fisher
  * @author Gary Russell
  * @author Gunnar Hillert
+ * @author Artem Bilan
+ * @author Biju Kunjummen
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration
@@ -85,6 +91,9 @@ public class HttpOutboundChannelAdapterParserTests {
 
 	@Autowired @Qualifier("withUrlExpressionAndTemplate")
 	private AbstractEndpoint withUrlExpressionAndTemplate;
+
+	@Autowired @Qualifier("withPoller1")
+	private AbstractEndpoint withPoller1;
 
 	@Autowired
 	private ApplicationContext applicationContext;
@@ -185,6 +194,14 @@ public class HttpOutboundChannelAdapterParserTests {
 		assertEquals(HttpMethod.POST.name(), TestUtils.getPropertyValue(handler, "httpMethodExpression", Expression.class).getExpressionString());
 		assertEquals("UTF-8", handlerAccessor.getPropertyValue("charset"));
 		assertEquals(true, handlerAccessor.getPropertyValue("extractPayload"));
+
+		//INT-3055
+		Object uriVariablesExpression = handlerAccessor.getPropertyValue("uriVariablesExpression");
+		assertNotNull(uriVariablesExpression);
+		assertEquals("@uriVariables", ((Expression) uriVariablesExpression).getExpressionString());
+		Object uriVariableExpressions = handlerAccessor.getPropertyValue("uriVariableExpressions");
+		assertNotNull(uriVariableExpressions);
+		assertTrue(((Map<?, ?>) uriVariableExpressions).isEmpty());
 	}
 
 	@Test
@@ -240,6 +257,11 @@ public class HttpOutboundChannelAdapterParserTests {
 		assertEquals(true, handlerAccessor.getPropertyValue("extractPayload"));
 	}
 
+	@Test
+	public void withPoller() {
+		assertThat(this.withPoller1, Matchers.instanceOf(PollingConsumer.class));
+	}
+
 	@Test(expected=BeanDefinitionParsingException.class)
 	public void failWithUrlAndExpression() {
 		new ClassPathXmlApplicationContext("HttpOutboundChannelAdapterParserTests-url-fail-context.xml", this.getClass());
@@ -247,10 +269,12 @@ public class HttpOutboundChannelAdapterParserTests {
 
 	public static class StubErrorHandler implements ResponseErrorHandler {
 
+		@Override
 		public boolean hasError(ClientHttpResponse response) throws IOException {
 			return false;
 		}
 
+		@Override
 		public void handleError(ClientHttpResponse response) throws IOException {
 		}
 	}

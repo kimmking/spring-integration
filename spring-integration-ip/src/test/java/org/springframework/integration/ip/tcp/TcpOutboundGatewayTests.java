@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,12 +54,11 @@ import org.apache.commons.logging.LogFactory;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.core.serializer.DefaultDeserializer;
 import org.springframework.core.serializer.DefaultSerializer;
-import org.springframework.integration.Message;
 import org.springframework.integration.MessageTimeoutException;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.core.PollableChannel;
 import org.springframework.integration.ip.tcp.connection.AbstractClientConnectionFactory;
 import org.springframework.integration.ip.tcp.connection.AbstractConnectionFactory;
 import org.springframework.integration.ip.tcp.connection.CachingClientConnectionFactory;
@@ -67,10 +66,12 @@ import org.springframework.integration.ip.tcp.connection.FailoverClientConnectio
 import org.springframework.integration.ip.tcp.connection.TcpConnectionSupport;
 import org.springframework.integration.ip.tcp.connection.TcpNetClientConnectionFactory;
 import org.springframework.integration.ip.tcp.connection.TcpNioClientConnectionFactory;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.SocketUtils;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Gary Russell
@@ -86,10 +87,13 @@ public class TcpOutboundGatewayTests {
 		AbstractConnectionFactory ccf = new TcpNetClientConnectionFactory("localhost", port);
 		final CountDownLatch latch = new CountDownLatch(1);
 		final AtomicBoolean done = new AtomicBoolean();
+		final AtomicReference<ServerSocket> serverSocket = new AtomicReference<ServerSocket>();
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
+			@Override
 			public void run() {
 				try {
 					ServerSocket server = ServerSocketFactory.getDefault().createServerSocket(port, 100);
+					serverSocket.set(server);
 					latch.countDown();
 					List<Socket> sockets = new ArrayList<Socket>();
 					int i = 0;
@@ -101,7 +105,8 @@ public class TcpOutboundGatewayTests {
 						oos.writeObject("Reply" + (i++));
 						sockets.add(socket);
 					}
-				} catch (Exception e) {
+				}
+				catch (Exception e) {
 					if (!done.get()) {
 						e.printStackTrace();
 					}
@@ -141,6 +146,8 @@ public class TcpOutboundGatewayTests {
 		for (int i = 0; i < 100; i++) {
 			assertTrue(replies.remove("Reply" + i));
 		}
+		done.set(true);
+		serverSocket.get().close();
 	}
 
 	@Test
@@ -149,6 +156,7 @@ public class TcpOutboundGatewayTests {
 		final CountDownLatch latch = new CountDownLatch(1);
 		final AtomicBoolean done = new AtomicBoolean();
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
+			@Override
 			public void run() {
 				try {
 					ServerSocket server = ServerSocketFactory.getDefault().createServerSocket(port, 10);
@@ -202,6 +210,7 @@ public class TcpOutboundGatewayTests {
 		final CountDownLatch latch = new CountDownLatch(1);
 		final AtomicBoolean done = new AtomicBoolean();
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
+			@Override
 			public void run() {
 				try {
 					ServerSocket server = ServerSocketFactory.getDefault().createServerSocket(port);
@@ -236,10 +245,11 @@ public class TcpOutboundGatewayTests {
 		gateway.setRequiresReply(true);
 		gateway.setOutputChannel(replyChannel);
 		@SuppressWarnings("unchecked")
-		Future<Integer>[] results = new Future[2];
+		Future<Integer>[] results = (Future<Integer>[]) new Future<?>[2];
 		for (int i = 0; i < 2; i++) {
 			final int j = i;
 			results[j] = (Executors.newSingleThreadExecutor().submit(new Callable<Integer>(){
+				@Override
 				public Integer call() throws Exception {
 					gateway.handleMessage(MessageBuilder.withPayload("Test" + j).build());
 					return 0;
@@ -319,6 +329,7 @@ public class TcpOutboundGatewayTests {
 
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
 
+			@Override
 			public void run() {
 				try {
 					ServerSocket server = ServerSocketFactory.getDefault().createServerSocket(port);
@@ -364,10 +375,11 @@ public class TcpOutboundGatewayTests {
 		gateway.setOutputChannel(replyChannel);
 		gateway.setRemoteTimeout(500);
 		@SuppressWarnings("unchecked")
-		Future<Integer>[] results = new Future[2];
+		Future<Integer>[] results = (Future<Integer>[]) new Future<?>[2];
 		for (int i = 0; i < 2; i++) {
 			final int j = i;
 			results[j] = (Executors.newSingleThreadExecutor().submit(new Callable<Integer>() {
+				@Override
 				public Integer call() throws Exception {
 					// increase the timeout after the first send
 					if (j > 0) {
@@ -419,6 +431,7 @@ public class TcpOutboundGatewayTests {
 
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
 
+			@Override
 			public void run() {
 				try {
 					ServerSocket server = ServerSocketFactory.getDefault().createServerSocket(port);
@@ -476,6 +489,7 @@ public class TcpOutboundGatewayTests {
 		gateway.setConnectionFactory(cachingFactory);
 		PollableChannel outputChannel = new QueueChannel();
 		gateway.setOutputChannel(outputChannel);
+		gateway.setBeanFactory(mock(BeanFactory.class));
 		gateway.afterPropertiesSet();
 		gateway.start();
 
@@ -498,6 +512,7 @@ public class TcpOutboundGatewayTests {
 
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
 
+			@Override
 			public void run() {
 				try {
 					ServerSocket server = ServerSocketFactory.getDefault().createServerSocket(port);
@@ -555,6 +570,7 @@ public class TcpOutboundGatewayTests {
 		gateway.setConnectionFactory(failoverFactory);
 		PollableChannel outputChannel = new QueueChannel();
 		gateway.setOutputChannel(outputChannel);
+		gateway.setBeanFactory(mock(BeanFactory.class));
 		gateway.afterPropertiesSet();
 		gateway.start();
 
@@ -633,14 +649,13 @@ public class TcpOutboundGatewayTests {
 
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
 
+			@Override
 			public void run() {
 				try {
 					ServerSocket server = ServerSocketFactory.getDefault().createServerSocket(port);
 					latch.countDown();
-					int i = 0;
 					while (!done.get()) {
 						Socket socket = server.accept();
-						i++;
 						while (!socket.isClosed()) {
 							try {
 								ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
@@ -671,6 +686,7 @@ public class TcpOutboundGatewayTests {
 		gateway.setRequiresReply(true);
 		gateway.setOutputChannel(replyChannel);
 		gateway.setRemoteTimeout(5000);
+		gateway.setBeanFactory(mock(BeanFactory.class));
 		gateway.afterPropertiesSet();
 		gateway.start();
 		try {

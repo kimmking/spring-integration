@@ -18,7 +18,8 @@ package org.springframework.integration.message;
 
 import java.util.Map;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * A message implementation that is produced by an advice after

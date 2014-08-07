@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.springframework.integration.store;
 
 import java.util.Collection;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 
 /**
  * A group of messages that are correlated with each other and should be processed in the same context.
@@ -28,16 +28,22 @@ import org.springframework.integration.Message;
  *
  * @author Dave Syer
  * @author Oleg Zhurakousky
+ * @author Gary Russell
  */
 public interface MessageGroup {
 
 	/**
 	 * Query if the message can be added.
+	 *
+	 * @param message The message.
+	 * @return true if the message can be added.
 	 */
 	boolean canAdd(Message<?> message);
 
 	/**
 	 * Returns all available Messages from the group at the time of invocation
+	 *
+	 * @return The messages.
 	 */
 	Collection<Message<?>> getMessages();
 
@@ -47,7 +53,7 @@ public interface MessageGroup {
 	Object getGroupId();
 
 	/**
-	 * Returns the sequenceNumber of the last released message. Used in Resequencer use cases only
+	 * @return the sequenceNumber of the last released message. Used in Resequencer use cases only
 	 */
 	int getLastReleasedMessageSequenceNumber();
 
@@ -57,7 +63,7 @@ public interface MessageGroup {
 	boolean isComplete();
 
 	/**
-	 *
+	 * Complete the group.
 	 */
 	void complete();
 

@@ -21,13 +21,12 @@ import java.util.List;
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.integration.Message;
 import org.springframework.integration.handler.AbstractReplyProducingMessageHandler;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+import org.springframework.messaging.Message;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -107,6 +106,11 @@ public class JdbcOutboundGateway extends AbstractReplyProducingMessageHandler im
 	}
 
 	@Override
+	public String getComponentType() {
+		return "jdbc:outbound-gateway";
+	}
+
+	@Override
 	protected void doInit() {
 		if (this.maxRowsPerPoll != null) {
 			Assert.notNull(poller, "If you want to set 'maxRowsPerPoll', then you must provide a 'selectQuery'.");
@@ -161,7 +165,7 @@ public class JdbcOutboundGateway extends AbstractReplyProducingMessageHandler im
 		if (list.size() == 1) {
 			payload = list.get(0);
 		}
-		return MessageBuilder.withPayload(payload).copyHeaders(requestMessage.getHeaders()).build();
+		return this.getMessageBuilderFactory().withPayload(payload).copyHeaders(requestMessage.getHeaders()).build();
 	}
 
 	/**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketException;
 import java.nio.channels.CancelledKeyException;
-import java.nio.channels.ClosedChannelException;
+import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -36,7 +35,9 @@ import org.springframework.util.Assert;
 /**
  * Implements a server connection factory that produces {@link TcpNioConnection}s using
  * a {@link ServerSocketChannel}. Must have a {@link TcpListener} registered.
+ *
  * @author Gary Russell
+ * @author Artem Bilan
  * @since 2.0
  *
  */
@@ -67,6 +68,7 @@ public class TcpNioServerConnectionFactory extends AbstractServerConnectionFacto
 	 * connection {@link TcpConnection#run()} using the task executor.
 	 * I/O errors on the server socket/channel are logged and the factory is stopped.
 	 */
+	@Override
 	public void run() {
 		if (this.getListener() == null) {
 			logger.info("No listener bound to server connection factory; will not read; exiting...");
@@ -83,7 +85,8 @@ public class TcpNioServerConnectionFactory extends AbstractServerConnectionFacto
 			if (this.getLocalAddress() == null) {
 				this.serverChannel.socket().bind(new InetSocketAddress(port),
 					Math.abs(this.getBacklog()));
-			} else {
+			}
+			else {
 				InetAddress whichNic = InetAddress.getByName(this.getLocalAddress());
 				this.serverChannel.socket().bind(new InetSocketAddress(whichNic, port),
 						Math.abs(this.getBacklog()));
@@ -94,15 +97,12 @@ public class TcpNioServerConnectionFactory extends AbstractServerConnectionFacto
 			this.selector = selector;
 			doSelect(this.serverChannel, selector);
 
-		} catch (IOException e) {
-			this.close();
-			if (this.isActive()) {
-				logger.error("Error on ServerSocketChannel", e);
-			}
+		}
+		catch (IOException e) {
+			this.stop();
 		}
 		finally {
 			this.setListening(false);
-			this.setActive(false);
 		}
 	}
 
@@ -114,35 +114,44 @@ public class TcpNioServerConnectionFactory extends AbstractServerConnectionFacto
 	 * When a socket is ready for reading, unregisters the read interest and
 	 * schedules a call to doRead which reads all available data. When the read
 	 * is complete, the socket is again registered for read interest.
-	 * @param server
-	 * @param selector
+	 * @param server the ServerSocketChannel to select
+	 * @param selector the Selector multiplexor
 	 * @throws IOException
-	 * @throws ClosedChannelException
-	 * @throws SocketException
 	 */
-	private void doSelect(ServerSocketChannel server, final Selector selector)
-			throws IOException, ClosedChannelException, SocketException {
+	private void doSelect(ServerSocketChannel server, final Selector selector) throws IOException {
 		while (this.isActive()) {
 			int soTimeout = this.getSoTimeout();
 			int selectionCount = 0;
 			try {
-				selectionCount = selector.select(soTimeout < 0 ? 0 : soTimeout);
-			} catch (CancelledKeyException cke) {
+				long timeout = soTimeout < 0 ? 0 : soTimeout;
+				if (getDelayedReads().size() > 0 && (timeout == 0 || getReadDelay() < timeout)) {
+					timeout = getReadDelay();
+				}
+				if (logger.isTraceEnabled()) {
+					logger.trace("Delayed reads:" + getDelayedReads().size() + " timeout " + timeout);
+				}
+				selectionCount = selector.select(timeout);
+				this.processNioSelections(selectionCount, selector, server, this.channelMap);
+			}
+			catch (CancelledKeyException cke) {
 				if (logger.isDebugEnabled()) {
 					logger.debug("CancelledKeyException during Selector.select()");
 				}
 			}
-			this.processNioSelections(selectionCount, selector, server, this.channelMap);
+			catch (ClosedSelectorException cse) {
+				if (this.isActive()) {
+					logger.error("Selector closed", cse);
+					break;
+				}
+			}
 		}
 	}
 
 	/**
-	 * @param selector
-	 * @param server
-	 * @param now
-	 * @throws IOException
-	 * @throws SocketException
-	 * @throws ClosedChannelException
+	 * @param selector The selector.
+	 * @param server The server socket channel.
+	 * @param now The current time.
+	 * @throws IOException Any IOException.
 	 */
 	@Override
 	protected void doAccept(final Selector selector, ServerSocketChannel server, long now) throws IOException {
@@ -186,24 +195,36 @@ public class TcpNioServerConnectionFactory extends AbstractServerConnectionFacto
 			TcpConnectionSupport wrappedConnection = wrapConnection(connection);
 			this.initializeConnection(wrappedConnection, socketChannel.socket());
 			return connection;
-		} catch (Exception e) {
+		}
+		catch (Exception e) {
 			logger.error("Failed to establish new incoming connection", e);
 			return null;
 		}
 	}
 
 	@Override
-	public void close() {
+	public void stop() {
+		this.setActive(false);
 		if (this.selector != null) {
-			this.selector.wakeup();
+			try {
+				this.selector.close();
+			}
+			catch (Exception e) {
+				logger.error("Error closing selector", e);
+			}
 		}
-		if (this.serverChannel == null) {
-			return;
+		if (this.serverChannel != null) {
+			try {
+				this.serverChannel.close();
+			}
+			catch (IOException e) {
+			}
+			finally {
+				this.serverChannel = null;
+			}
 		}
-		try {
-			this.serverChannel.close();
-		} catch (IOException e) {}
-		this.serverChannel = null;
+
+		super.stop();
 	}
 
 	public void setUsingDirectBuffers(boolean usingDirectBuffers) {

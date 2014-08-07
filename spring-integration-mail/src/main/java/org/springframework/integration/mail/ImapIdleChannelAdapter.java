@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,12 +36,13 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.ApplicationEventPublisherAware;
 import org.springframework.integration.endpoint.MessageProducerSupport;
 import org.springframework.integration.mail.event.MailIntegrationEvent;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.transaction.IntegrationResourceHolder;
+import org.springframework.integration.transaction.IntegrationResourceHolderSynchronization;
 import org.springframework.integration.transaction.TransactionSynchronizationFactory;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.Trigger;
 import org.springframework.scheduling.TriggerContext;
+import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
@@ -57,6 +58,7 @@ import org.springframework.util.CollectionUtils;
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  * @author Gary Russell
+ * @author Artem Bilan
  */
 public class ImapIdleChannelAdapter extends MessageProducerSupport implements BeanClassLoaderAware,
 		ApplicationEventPublisherAware {
@@ -119,6 +121,7 @@ public class ImapIdleChannelAdapter extends MessageProducerSupport implements Be
 	 * Specify whether the IDLE task should reconnect automatically after
 	 * catching a {@link FolderClosedException} while waiting for messages. The
 	 * default value is <code>true</code>.
+	 * @param shouldReconnectAutomatically true to reconnect.
 	 */
 	public void setShouldReconnectAutomatically(boolean shouldReconnectAutomatically) {
 		this.shouldReconnectAutomatically = shouldReconnectAutomatically;
@@ -129,6 +132,7 @@ public class ImapIdleChannelAdapter extends MessageProducerSupport implements Be
 		return "mail:imap-idle-channel-adapter";
 	}
 
+	@Override
 	public void setBeanClassLoader(ClassLoader classLoader) {
 		this.classLoader = classLoader;
 	}
@@ -176,6 +180,7 @@ public class ImapIdleChannelAdapter extends MessageProducerSupport implements Be
 
 
 	private class ReceivingTask implements Runnable {
+		@Override
 		public void run() {
 			try {
 				idleTask.run();
@@ -194,6 +199,7 @@ public class ImapIdleChannelAdapter extends MessageProducerSupport implements Be
 
 	private class IdleTask implements Runnable {
 
+		@Override
 		public void run() {
 			final TaskScheduler scheduler =  getTaskScheduler();
 			Assert.notNull(scheduler, "'taskScheduler' must not be null" );
@@ -230,7 +236,7 @@ public class ImapIdleChannelAdapter extends MessageProducerSupport implements Be
 							"Failure in 'idle' task. Will resubmit.", e);
 				}
 				else {
-					throw new org.springframework.integration.MessagingException(
+					throw new org.springframework.messaging.MessagingException(
 							"Failure in 'idle' task. Will NOT resubmit.", e);
 				}
 			}
@@ -239,24 +245,28 @@ public class ImapIdleChannelAdapter extends MessageProducerSupport implements Be
 
 	private Runnable createMessageSendingTask(final Message mailMessage){
 		Runnable sendingTask = new Runnable() {
+			@Override
 			public void run() {
-				org.springframework.integration.Message<?> message =
-						MessageBuilder.withPayload(mailMessage).build();
+				org.springframework.messaging.Message<?> message =
+						ImapIdleChannelAdapter.this.getMessageBuilderFactory().withPayload(mailMessage).build();
 
 				if (TransactionSynchronizationManager.isActualTransactionActive()) {
 					if (transactionSynchronizationFactory != null){
-						IntegrationResourceHolder holder = new IntegrationResourceHolder();
-						holder.setMessage(message);
-						TransactionSynchronizationManager.bindResource(ImapIdleChannelAdapter.this, holder);
-						TransactionSynchronizationManager.
-							registerSynchronization(transactionSynchronizationFactory.create(ImapIdleChannelAdapter.this));
+						TransactionSynchronization synchronization =
+								transactionSynchronizationFactory.create(ImapIdleChannelAdapter.this);
+						TransactionSynchronizationManager.registerSynchronization(synchronization);
+						if (synchronization instanceof IntegrationResourceHolderSynchronization) {
+							IntegrationResourceHolder holder =
+									((IntegrationResourceHolderSynchronization) synchronization).getResourceHolder();
+							holder.setMessage(message);
+						}
 					}
 				}
 				sendMessage(message);
 			}
 		};
 
-		// wrap in the TX proxy if neccessery
+		// wrap in the TX proxy if necessary
 		if (!CollectionUtils.isEmpty(adviceChain)) {
 			ProxyFactory proxyFactory = new ProxyFactory(sendingTask);
 			if (!CollectionUtils.isEmpty(adviceChain)) {
@@ -282,6 +292,7 @@ public class ImapIdleChannelAdapter extends MessageProducerSupport implements Be
 
 	private class PingTask implements Runnable {
 
+		@Override
 		public void run() {
 			try {
 				Store store = mailReceiver.getStore();
@@ -299,6 +310,7 @@ public class ImapIdleChannelAdapter extends MessageProducerSupport implements Be
 		private volatile boolean delayNextExecution;
 
 
+		@Override
 		public Date nextExecutionTime(TriggerContext triggerContext) {
 			if (delayNextExecution){
 				delayNextExecution = false;

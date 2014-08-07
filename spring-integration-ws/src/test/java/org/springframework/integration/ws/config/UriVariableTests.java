@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.atomic.AtomicReference;
+
 import javax.jms.BytesMessage;
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
@@ -42,16 +43,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
 import org.springframework.beans.DirectFieldAccessor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageHandlingException;
-import org.springframework.integration.core.MessageHandler;
+import org.springframework.messaging.MessageHandlingException;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.ws.client.WebServiceClientException;
@@ -137,7 +137,7 @@ public class UriVariableTests {
 			// expected
 			assertThat(e.getCause(), Matchers.is(Matchers.instanceOf(WebServiceIOException.class))); // offline
 		}
-		assertEquals("http://localhost/spring-integration?param=test1%20%26%20test2", uri.get());
+		assertEquals("http://localhost/spring-integration?param=test1%20&%20test2", uri.get());
 	}
 
 	@Test
@@ -258,6 +258,10 @@ public class UriVariableTests {
 
 		public boolean handleFault(MessageContext messageContext) throws WebServiceClientException {
 			return false;
+		}
+
+		public void afterCompletion(MessageContext messageContext, Exception ex) throws WebServiceClientException {
+
 		}
 	}
 

@@ -15,8 +15,8 @@
  */
 package org.springframework.integration.handler.advice;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.retry.RecoveryCallback;
 import org.springframework.retry.RetryCallback;
 import org.springframework.retry.RetryContext;
@@ -49,6 +49,7 @@ public class RequestHandlerRetryAdvice extends AbstractRequestHandlerAdvice
 	// Stateless unless a state generator is provided
 	private volatile RetryStateGenerator retryStateGenerator =
 			new RetryStateGenerator() {
+				@Override
 				public RetryState determineRetryState(Message<?> message) {
 					return null;
 				}
@@ -81,7 +82,8 @@ public class RequestHandlerRetryAdvice extends AbstractRequestHandlerAdvice
 		messageHolder.set(message);
 
 		try {
-			return retryTemplate.execute(new RetryCallback<Object>() {
+			return retryTemplate.execute(new RetryCallback<Object, Exception>() {
+				@Override
 				public Object doWithRetry(RetryContext context) throws Exception {
 					return callback.cloneAndExecute();
 				}
@@ -89,7 +91,7 @@ public class RequestHandlerRetryAdvice extends AbstractRequestHandlerAdvice
 		}
 		catch (MessagingException e) {
 			if (e.getFailedMessage() == null) {
-				e.setFailedMessage(message);
+				throw new MessagingException(message, e);
 			}
 			throw e;
 		}
@@ -102,15 +104,18 @@ public class RequestHandlerRetryAdvice extends AbstractRequestHandlerAdvice
 		}
 	}
 
-	public <T> boolean open(RetryContext context, RetryCallback<T> callback) {
+	@Override
+	public <T, E extends Throwable> boolean open(RetryContext context, RetryCallback<T, E> callback) {
 		context.setAttribute("message", messageHolder.get());
 		return true;
 	}
 
-	public <T> void close(RetryContext context, RetryCallback<T> callback, Throwable throwable) {
+	@Override
+	public <T, E extends Throwable> void close(RetryContext context, RetryCallback<T, E> callback, Throwable throwable) {
 	}
 
-	public <T> void onError(RetryContext context, RetryCallback<T> callback, Throwable throwable) {
+	@Override
+	public <T, E extends Throwable> void onError(RetryContext context, RetryCallback<T, E> callback, Throwable throwable) {
 	}
 
 }

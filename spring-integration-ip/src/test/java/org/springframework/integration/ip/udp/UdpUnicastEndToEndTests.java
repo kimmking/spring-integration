@@ -16,8 +16,8 @@
 
 package org.springframework.integration.ip.udp;
 
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -28,17 +28,18 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.Before;
 import org.junit.Test;
+
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.channel.QueueChannel;
 import org.springframework.integration.history.MessageHistory;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
-import org.springframework.integration.support.channel.ChannelResolver;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.core.DestinationResolver;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * Sends and receives a simple message through to the Udp channel adapters.
@@ -107,8 +108,8 @@ public class UdpUnicastEndToEndTests implements Runnable {
 
 
 	public void launchSender(ApplicationContext applicationContext) throws Exception {
-		ChannelResolver channelResolver = new BeanFactoryChannelResolver(applicationContext);
-		MessageChannel inputChannel = channelResolver.resolveChannelName("inputChannel");
+		DestinationResolver<MessageChannel> channelResolver = new BeanFactoryChannelResolver(applicationContext);
+		MessageChannel inputChannel = channelResolver.resolveDestination("inputChannel");
 		if (!readyToReceive.await(30, TimeUnit.SECONDS)) {
 			fail("Receiver failed to start in 30s");
 		}
@@ -142,7 +143,9 @@ public class UdpUnicastEndToEndTests implements Runnable {
 	 * Instantiate the receiving context
 	 */
 	@SuppressWarnings("unchecked")
+	@Override
 	public void run() {
+		@SuppressWarnings("resource")
 		AbstractApplicationContext ctx = new ClassPathXmlApplicationContext(
 				"testIp-in-context.xml", UdpUnicastEndToEndTests.class);
 		UnicastReceivingChannelAdapter inbound = ctx.getBean(UnicastReceivingChannelAdapter.class);
@@ -154,7 +157,8 @@ public class UdpUnicastEndToEndTests implements Runnable {
 					throw new RuntimeException("Failed to start listening");
 				}
 			}
-		} catch (Exception e) { }
+		}
+		catch (Exception e) { }
 		while (okToRun) {
 			try {
 				readyToReceive.countDown();
@@ -178,6 +182,7 @@ public class UdpUnicastEndToEndTests implements Runnable {
 			}
 		}
 		ctx.stop();
+		ctx.close();
 	}
 
 

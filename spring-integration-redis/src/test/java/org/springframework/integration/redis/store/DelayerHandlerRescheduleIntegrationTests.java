@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2013-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -13,58 +13,39 @@
 
 package org.springframework.integration.redis.store;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.util.concurrent.TimeUnit;
 
-import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 
 import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.context.IntegrationContextUtils;
-import org.springframework.integration.core.PollableChannel;
 import org.springframework.integration.handler.DelayHandler;
 import org.springframework.integration.redis.rules.RedisAvailable;
-import org.springframework.integration.redis.rules.RedisAvailableRule;
 import org.springframework.integration.redis.rules.RedisAvailableTests;
 import org.springframework.integration.store.MessageGroup;
 import org.springframework.integration.store.MessageGroupStore;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.support.LongRunningIntegrationTest;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.PollableChannel;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 /**
  * @author Artem Bilan
+ * @author Gary Russell
  * @since 3.0
  */
 public class DelayerHandlerRescheduleIntegrationTests extends RedisAvailableTests {
 
 	public static final String DELAYER_ID = "delayerWithRedisMS";
 
-	public static LettuceConnectionFactory  connectionFactory;
-
 	@Rule
 	public LongRunningIntegrationTest longTests = new LongRunningIntegrationTest();
-
-	@BeforeClass
-	public static void setup() {
-		connectionFactory = new LettuceConnectionFactory();
-		connectionFactory.setPort(RedisAvailableRule.REDIS_PORT);
-		connectionFactory.afterPropertiesSet();
-	}
-
-	public static void tearDown() {
-		connectionFactory.destroy();
-	}
 
 	@Test
 	@RedisAvailable
@@ -126,6 +107,8 @@ public class DelayerHandlerRescheduleIntegrationTests extends RedisAvailableTest
 
 		assertEquals(1, messageStore.getMessageGroupCount());
 		assertEquals(0, messageStore.messageGroupSize(delayerMessageGroupId));
+
+		messageStore.removeMessageGroup(delayerMessageGroupId);
 
 	}
 

@@ -88,8 +88,8 @@
 
     <para>
     Spring Integration's MongoDB module provides the <classname>MongoDbMessageStore</classname> which is an implementation of both
-    the <classname>MessageStore</classname> strategy (mainly used by the <emphasis>QueueChannel</emphasis> and <emphasis>ClaimCheck</emphasis>
-    patterns) and the <classname>MessageGroupStore</classname> strategy (mainly used by the <emphasis>Aggregator</emphasis> and
+    the <classname>MessageStore</classname> strategy (mainly used by the <emphasis>ClaimCheck</emphasis>pattern)
+	and the <classname>MessageGroupStore</classname> strategy (mainly used by the <emphasis>Aggregator</emphasis> and
     <emphasis>Resequencer</emphasis> patterns).
 	</para>
 
@@ -111,15 +111,18 @@
     and an <emphasis>Aggregator</emphasis>. As you can see it is a simple bean configuration, and it expects a
     <classname>MongoDbFactory</classname> as a constructor argument.
     </para>
+	<para>
+	  The <classname>MongoDbMessageStore</classname> expands the <interfacename>Message</interfacename> as a Mongo document
+	  with all nested properties using the Spring Data Mongo Mapping mechanism. It is useful when you need to have access to
+	  the <code>payload</code> or <code>headers</code> for auditing or analytics, for example, against stored messages.
+	</para>
 	<important>
 		<para>
 			The <classname>MongoDbMessageStore</classname> uses a custom <classname>MappingMongoConverter</classname> implementation
 			to store <interfacename>Message</interfacename>s as MongoDB documents and there are some limitations
 			for the properties (<code>payload</code> and <code>header</code> values) of the <interfacename>Message</interfacename>.
-			For example an <classname>ErrorMessage</classname> can't be converted to the MongoDB document, because it has an
-			<classname>Exception</classname> property, where the cause property is infintely recursed. Also, there is no ability to
-			configure
-			custom converters for complex domain <code>payload</code>s or <code>header</code> values.
+			For example, there is no ability to configure custom converters for complex domain <code>payload</code>s or <code>header</code> values.
+			Or to provide a custom <classname>MongoTemplate</classname> (or <classname>MappingMongoConverter</classname>).
 			To achieve these capabilities, an alternative MongoDB <interfacename>MessageStore</interfacename> implementation has been
 			introduced; see next paragraph.
 		</para>
@@ -128,8 +131,7 @@
 		 <emphasis>Spring Integration 3.0</emphasis> introduced the <classname>ConfigurableMongoDbMessageStore</classname> -
 		 <interfacename>MessageStore</interfacename> and <interfacename>MessageGroupStore</interfacename> implementation.
 		 This class can receive, as a constructor argument, a <classname>MongoTemplate</classname>, with which you can
-		 configure with a
-		 custom <classname>WriteConcern</classname>, for example. Another constructor requires a
+		 configure with a custom <classname>WriteConcern</classname>, for example. Another constructor requires a
 		 <classname>MappingMongoConverter</classname>, and a <interfacename>MongoDbFactory</interfacename>,
 		 which allows you to provide some custom conversions for <interfacename>Message</interfacename>s and their properties.
 		 Note, by default, the <classname>ConfigurableMongoDbMessageStore</classname> uses standard Java serialization
@@ -137,9 +139,57 @@
 		 properties from <classname>MongoTemplate</classname>, which is built from the provided
 		 <interfacename>MongoDbFactory</interfacename> and <classname>MappingMongoConverter</classname>.
 		 The default name for the collection stored by the <classname>ConfigurableMongoDbMessageStore</classname> is
-		 <code>configurableStoreMessages</code>. It is recommended to use this implementation for robust and flexible solutions.
-		 The <classname>MongoDbMessageStore</classname> remains for backward compatibility and may be removed in future releases.
+		 <code>configurableStoreMessages</code>. It is recommended to use this implementation for robust and flexible solutions
+		 when messages contain complex data types.
 	 </para>
+	  <section id="mongodb-priority-channel-message-store">
+		  <title>MongodDB Channel Message Store</title>
+
+		  <para>
+			  Starting with <emphasis>version 4.0</emphasis>, the new <code>MongoDbChannelMessageStore</code>
+			  has been introduced; it is an optimized <interfacename>MessageGroupStore</interfacename> for use
+			  in <classname>QueueChannel</classname>s.
+			  With <code>priorityEnabled = true</code>, it can be used in
+			  <code>&lt;int:priority-queue&gt;</code>s to achieve <emphasis>priority</emphasis> order polling for
+			  persisted messages. The <emphasis>priority</emphasis> MonogDB document field is populated from the
+			  <code>IntegrationMessageHeaderAccessor.PRIORITY</code> (<code>priority</code>)
+			  message header.
+		  </para>
+		  <para>
+			  In addition, all MongoDB <interfacename>MessageStore</interfacename>s now have a <code>sequence</code>
+			  field for MessageGroup
+			  documents. The <code>sequence</code> value is the result of an <code>$inc</code> operation for a simple
+			  <code>sequence</code>
+			  document from the same collection, which is created on demand. The <code>sequence</code> field is used in
+			  <code>poll</code> operations to provide first-in-first-out (FIFO) message order
+			  (within priority if configured) when messages are stored within the same millisecond.
+		  </para>
+		  <note>
+			  <para>
+				  It is not recommended to use the same <classname>MongoDbChannelMessageStore</classname> bean
+				  for priority and non-priority, because the <code>priorityEnabled</code> option applies to the entire store.
+				  However, the same <code>collection</code> can be used for both
+				  <classname>MongoDbChannelMessageStore</classname> types, because message polling from the
+				  store is sorted and uses indexes. To configure that scenario, simply extend one message store bean
+				  from the other:
+			  </para>
+		  </note>
+		  <programlisting language="xml"><![CDATA[<bean id="channelStore" class="o.s.i.mongodb.store.MongoDbChannelMessageStore">
+    <constructor-arg name="mongoDbFactory" ref="mongoDbFactory"/>
+</bean>
+
+<int:channel id="queueChannel">
+    <int:queue message-store="store"/>
+</int:channel>
+
+<bean id="priorityStore" parent="channelStore">
+    <property name="priorityEnabled" value="true"/>
+</bean>
+
+<int:channel id="priorityChannel">
+    <int:priority-queue message-store="priorityStore"/>
+</int:channel>]]></programlisting>
+	  </section>
   </section>
 
   <section id="mongodb-inbound-channel-adapter">

@@ -27,10 +27,10 @@ import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.SpelParserConfiguration;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.integration.channel.QueueChannel;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 
 /**
@@ -61,7 +61,6 @@ public class ExpressionEvaluatingCorrelationStrategyTests {
 		Expression expression = parser.parseExpression("payload.substring(0,1)");
 		strategy = new ExpressionEvaluatingCorrelationStrategy(expression);
 		strategy.setBeanFactory(mock(BeanFactory.class));
-		strategy.afterPropertiesSet();
 		Object correlationKey = strategy.getCorrelationKey(new GenericMessage<String>("bla"));
 		assertThat(correlationKey, is(instanceOf(String.class)));
 		assertThat((String) correlationKey, is("b"));

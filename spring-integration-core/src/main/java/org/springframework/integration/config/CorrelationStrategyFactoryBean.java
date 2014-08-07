@@ -18,26 +18,27 @@ package org.springframework.integration.config;
 import java.lang.reflect.Method;
 
 import org.springframework.beans.factory.FactoryBean;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.aggregator.CorrelationStrategy;
-import org.springframework.integration.aggregator.MethodInvokingCorrelationStrategy;
 import org.springframework.integration.aggregator.HeaderAttributeCorrelationStrategy;
+import org.springframework.integration.aggregator.MethodInvokingCorrelationStrategy;
+import org.springframework.integration.config.annotation.MessagingAnnotationUtils;
 import org.springframework.util.StringUtils;
 
 /**
  * Convenience factory for XML configuration of a {@link CorrelationStrategy}. Encapsulates the knowledge of the default
  * strategy and search algorithms for POJO and annotated methods.
- * 
+ *
  * @author Dave Syer
- * 
+ *
  */
 public class CorrelationStrategyFactoryBean implements FactoryBean<CorrelationStrategy> {
 
-	private CorrelationStrategy delegate = new HeaderAttributeCorrelationStrategy(MessageHeaders.CORRELATION_ID);
+	private CorrelationStrategy delegate = new HeaderAttributeCorrelationStrategy(IntegrationMessageHeaderAccessor.CORRELATION_ID);
 
 	/**
 	 * Create a factory and set up the delegate which clients of the factory will see as its product.
-	 * 
+	 *
 	 * @param target the target object (null if default strategy is acceptable)
 	 */
 	public CorrelationStrategyFactoryBean(Object target) {
@@ -46,7 +47,7 @@ public class CorrelationStrategyFactoryBean implements FactoryBean<CorrelationSt
 
 	/**
 	 * Create a factory and set up the delegate which clients of the factory will see as its product.
-	 * 
+	 *
 	 * @param target the target object (null if default strategy is acceptable)
 	 * @param methodName the method name to invoke in the target (null if it can be inferred)
 	 */
@@ -60,7 +61,8 @@ public class CorrelationStrategyFactoryBean implements FactoryBean<CorrelationSt
 				delegate = new MethodInvokingCorrelationStrategy(target, methodName);
 			}
 			else {
-				Method method = AnnotationFinder.findAnnotatedMethod(target, org.springframework.integration.annotation.CorrelationStrategy.class);
+				Method method = MessagingAnnotationUtils.findAnnotatedMethod(target,
+						org.springframework.integration.annotation.CorrelationStrategy.class);
 				if (method != null) {
 					delegate = new MethodInvokingCorrelationStrategy(target, method);
 				}

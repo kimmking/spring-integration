@@ -44,7 +44,7 @@ public class MessageBusParserTests {
 		ApplicationContext context = new ClassPathXmlApplicationContext(
 				"messageBusWithErrorChannel.xml", this.getClass());
 		BeanFactoryChannelResolver resolver = new BeanFactoryChannelResolver(context);
-		assertEquals(context.getBean("errorChannel"), resolver.resolveChannelName("errorChannel"));
+		assertEquals(context.getBean("errorChannel"), resolver.resolveDestination("errorChannel"));
 	}
 
 	@Test
@@ -52,7 +52,7 @@ public class MessageBusParserTests {
 		ApplicationContext context = new ClassPathXmlApplicationContext(
 				"messageBusWithDefaults.xml", this.getClass());
 		BeanFactoryChannelResolver resolver = new BeanFactoryChannelResolver(context);
-		assertEquals(context.getBean("errorChannel"), resolver.resolveChannelName("errorChannel"));
+		assertEquals(context.getBean("errorChannel"), resolver.resolveDestination("errorChannel"));
 	}
 
 	@Test

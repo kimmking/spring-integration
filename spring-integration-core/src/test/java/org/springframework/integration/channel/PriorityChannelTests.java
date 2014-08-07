@@ -25,8 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Test;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 
 import static org.junit.Assert.assertEquals;

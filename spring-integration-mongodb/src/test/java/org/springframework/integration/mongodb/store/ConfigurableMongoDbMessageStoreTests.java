@@ -16,28 +16,13 @@
 package org.springframework.integration.mongodb.store;
 
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-
-import org.hamcrest.Matchers;
-import org.junit.Test;
+import com.mongodb.MongoClient;
 
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.data.mongodb.MongoDbFactory;
 import org.springframework.data.mongodb.core.SimpleMongoDbFactory;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.message.AdviceMessage;
-import org.springframework.integration.message.ErrorMessage;
-import org.springframework.integration.message.GenericMessage;
-import org.springframework.integration.mongodb.rules.MongoDbAvailable;
 import org.springframework.integration.store.MessageStore;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.test.util.TestUtils;
-
-import com.mongodb.Mongo;
 
 /**
  * @author Amol Nayak
@@ -47,77 +32,13 @@ public class ConfigurableMongoDbMessageStoreTests extends AbstractMongoDbMessage
 
 	@Override
 	protected MessageStore getMessageStore() throws Exception {
-		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new Mongo(), "test");
+		MongoDbFactory mongoDbFactory = new SimpleMongoDbFactory(new MongoClient(), "test");
 		ConfigurableMongoDbMessageStore mongoDbMessageStore = new ConfigurableMongoDbMessageStore(mongoDbFactory);
 		GenericApplicationContext testApplicationContext = TestUtils.createTestApplicationContext();
 		testApplicationContext.refresh();
 		mongoDbMessageStore.setApplicationContext(testApplicationContext);
 		mongoDbMessageStore.afterPropertiesSet();
 		return mongoDbMessageStore;
-	}
-
-
-	@Test
-	@MongoDbAvailable
-	public void testInt3076MessageAsPayload() throws Exception{
-		MessageStore store = this.getMessageStore();
-		Person p = new Person();
-		p.setFname("John");
-		p.setLname("Doe");
-		Message<?> messageToStore = new GenericMessage<Message<?>>(MessageBuilder.withPayload(p).build());
-		store.addMessage(messageToStore);
-		Message<?> retrievedMessage = store.getMessage(messageToStore.getHeaders().getId());
-		assertNotNull(retrievedMessage);
-		assertTrue(retrievedMessage.getPayload() instanceof GenericMessage);
-		assertEquals(messageToStore.getPayload(), retrievedMessage.getPayload());
-		assertEquals(messageToStore.getHeaders(), retrievedMessage.getHeaders());
-		assertEquals(((Message<?>) messageToStore.getPayload()).getPayload(), p);
-		assertEquals(messageToStore, retrievedMessage);
-	}
-
-	@Test
-	@MongoDbAvailable
-	public void testInt3076AdviceMessage() throws Exception{
-		MessageStore store = this.getMessageStore();
-		Person p = new Person();
-		p.setFname("John");
-		p.setLname("Doe");
-		Message<Person> inputMessage = MessageBuilder.withPayload(p).build();
-		Message<?> messageToStore = new AdviceMessage("foo", inputMessage);
-		store.addMessage(messageToStore);
-		Message<?> retrievedMessage = store.getMessage(messageToStore.getHeaders().getId());
-		assertNotNull(retrievedMessage);
-		assertTrue(retrievedMessage instanceof AdviceMessage);
-		assertEquals(messageToStore.getPayload(), retrievedMessage.getPayload());
-		assertEquals(messageToStore.getHeaders(), retrievedMessage.getHeaders());
-		assertEquals(inputMessage, ((AdviceMessage) retrievedMessage).getInputMessage());
-		assertEquals(messageToStore, retrievedMessage);
-	}
-
-	@Test
-	@MongoDbAvailable
-	public void testInt3076ErrorMessage() throws Exception{
-		MessageStore store = this.getMessageStore();
-		Person p = new Person();
-		p.setFname("John");
-		p.setLname("Doe");
-		Message<Person> failedMessage = MessageBuilder.withPayload(p).build();
-		MessagingException messagingException;
-		try {
-			throw new RuntimeException("intentional");
-		}
-		catch (Exception e) {
-			messagingException = new MessagingException(failedMessage, "intentional MessagingException", e);
-		}
-		Message<?> messageToStore = new ErrorMessage(messagingException);
-		store.addMessage(messageToStore);
-		Message<?> retrievedMessage = store.getMessage(messageToStore.getHeaders().getId());
-		assertNotNull(retrievedMessage);
-		assertTrue(retrievedMessage instanceof ErrorMessage);
-		assertThat(retrievedMessage.getPayload(), Matchers.instanceOf(MessagingException.class));
-		assertEquals("intentional MessagingException", ((MessagingException) retrievedMessage.getPayload()).getMessage());
-		assertEquals(failedMessage, ((MessagingException) retrievedMessage.getPayload()).getFailedMessage());
-		assertEquals(messageToStore.getHeaders(), retrievedMessage.getHeaders());
 	}
 
 }

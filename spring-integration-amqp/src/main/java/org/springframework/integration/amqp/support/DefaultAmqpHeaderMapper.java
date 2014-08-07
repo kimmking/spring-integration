@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import java.util.Map;
 
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.amqp.AmqpHeaders;
 import org.springframework.integration.mapping.AbstractHeaderMapper;
 import org.springframework.integration.mapping.support.JsonHeaders;
@@ -133,7 +133,7 @@ public class DefaultAmqpHeaderMapper extends AbstractHeaderMapper<MessagePropert
 			}
 			Integer priority = amqpMessageProperties.getPriority();
 			if (priority != null && priority > 0) {
-				headers.put(MessageHeaders.PRIORITY, priority);
+				headers.put(IntegrationMessageHeaderAccessor.PRIORITY, priority);
 			}
 			String receivedExchange = amqpMessageProperties.getReceivedExchange();
 			if (StringUtils.hasText(receivedExchange)) {
@@ -171,12 +171,14 @@ public class DefaultAmqpHeaderMapper extends AbstractHeaderMapper<MessagePropert
 				}
 			}
 
+			@SuppressWarnings("deprecation")
 			Object replyCorrelation = amqpMessageProperties.getHeaders().get(AmqpHeaders.STACKED_CORRELATION_HEADER);
 			if (replyCorrelation instanceof String) {
 				if (StringUtils.hasText((String) replyCorrelation)) {
 					headers.put(AmqpHeaders.SPRING_REPLY_CORRELATION, replyCorrelation);
 				}
 			}
+			@SuppressWarnings("deprecation")
 			Object replyToStack = amqpMessageProperties.getHeaders().get(AmqpHeaders.STACKED_REPLY_TO_HEADER);
 			if (replyToStack instanceof String) {
 				if (StringUtils.hasText((String) replyToStack)) {
@@ -195,6 +197,7 @@ public class DefaultAmqpHeaderMapper extends AbstractHeaderMapper<MessagePropert
 	/**
 	 * Extract user-defined headers from an AMQP MessageProperties instance.
 	 */
+	@SuppressWarnings("deprecation")
 	@Override
 	protected Map<String, Object> extractUserDefinedHeaders(MessageProperties amqpMessageProperties) {
 		Map<String, Object> headers = amqpMessageProperties.getHeaders();
@@ -255,7 +258,7 @@ public class DefaultAmqpHeaderMapper extends AbstractHeaderMapper<MessagePropert
 		if (StringUtils.hasText(messageId)) {
 			amqpMessageProperties.setMessageId(messageId);
 		}
-		Integer priority = getHeaderIfAvailable(headers, MessageHeaders.PRIORITY, Integer.class);
+		Integer priority = getHeaderIfAvailable(headers, IntegrationMessageHeaderAccessor.PRIORITY, Integer.class);
 		if (priority != null) {
 			amqpMessageProperties.setPriority(priority);
 		}
@@ -288,6 +291,8 @@ public class DefaultAmqpHeaderMapper extends AbstractHeaderMapper<MessagePropert
 			amqpMessageProperties.setUserId(userId);
 		}
 
+		Map<String, String> jsonHeaders = new HashMap<String, String>();
+
 		for (String jsonHeader : JsonHeaders.HEADERS) {
 			Object value = getHeaderIfAvailable(headers, jsonHeader, Object.class);
 			if (value != null) {
@@ -295,8 +300,16 @@ public class DefaultAmqpHeaderMapper extends AbstractHeaderMapper<MessagePropert
 				if (value instanceof Class<?>) {
 					value = ((Class<?>) value).getName();
 				}
-				amqpMessageProperties.setHeader(jsonHeader.replaceFirst(JsonHeaders.PREFIX, ""), value.toString());
+				jsonHeaders.put(jsonHeader.replaceFirst(JsonHeaders.PREFIX, ""), value.toString());
 			}
+		}
+
+		/*
+		 * If the MessageProperties already contains JsonHeaders, don't overwrite them here because they were
+		 * set up by a message converter.
+		 */
+		if (!amqpMessageProperties.getHeaders().containsKey(JsonHeaders.TYPE_ID.replaceFirst(JsonHeaders.PREFIX, ""))) {
+			amqpMessageProperties.getHeaders().putAll(jsonHeaders);
 		}
 
 		String replyCorrelation = getHeaderIfAvailable(headers, AmqpHeaders.SPRING_REPLY_CORRELATION, String.class);

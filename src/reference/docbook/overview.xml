@@ -19,7 +19,7 @@
       enterprise applications. Developers benefit from the consistency of this model and especially the fact that it is
       based upon well-established best practices such as programming to interfaces and favoring composition over
       inheritance. Spring's simplified abstractions and powerful support libraries boost developer productivity while
-      simultaneously increasing the level of testability and portability. 
+      simultaneously increasing the level of testability and portability.
     </para>
     <para>
       Spring Integration is motivated by these same goals and principles. It
@@ -318,4 +318,93 @@
     </section>
   </section>
 
+  <section>
+    <title>Configuration</title>
+    <para>
+      Throughout this document you will see references to XML namespace support for declaring elements in a Spring
+      Integration flow. This support is provided by a series of namespace parsers that generate appropriate
+      bean definitions to implement a particular component. For example, many endpoints consist of a
+      <interfacename>MessageHandler</interfacename> bean and a <classname>ConsumerEndpointFactoryBean</classname>
+      into which the handler and an input channel name are injected.
+    </para>
+    <para>
+      The first time a Spring Integration namespace element is encountered, the framework automatically declares
+      a number of beans that are used to support the runtime environment (task scheduler,
+      implicit channel creator, etc).
+    </para>
+    <para id="enable-integration">
+      Starting with <emphasis>version 4.0</emphasis>, these support beans can also be defined when using
+      <code>@Configuration</code> classes, by adding a new annotation <code>@EnableIntegration</code>.
+      This is useful when declaring a simple Spring Integration flow using purely Java Configuration.
+      For example; you can declare an endpoint with a <interfacename>MessageHandler</interfacename> <code>@Bean</code>
+      as well as a <classname>ConsumerEndpointFactoryBean</classname> <code>@Bean</code>.
+    </para>
+    <para>
+      <code>@EnableIntegration</code> is also useful when you have a parent context with no Spring Integration
+      components and 2 or more child contexts that do use Spring Integration. It would enable these common
+      components to be declared once only, in the parent context.
+    </para>
+	<para>
+		The <code>@IntegrationComponentScan</code> annotation has also been introduced to permit classpath
+		scanning. This annotation plays a similar role as the standard Spring Framework <code>@ComponentScan</code> annotation,
+		but it is restricted just to Spring Integration specific components and annotations,
+		which aren't reachable by the standard Spring Framework component scan mechanism.
+		For example <xref linkend="messaging-gateway-annotation"/>.
+	</para>
+	<para>
+		The <code>@EnablePublisher</code> annotation has been introduced to register a
+		<classname>PublisherAnnotationBeanPostProcessor</classname> bean and configure the <code>default-publisher-channel</code>
+		for those <classname>@Publisher</classname> annotations which are provided without a <code>channel</code> attribute.
+		If more than one <code>@EnablePublisher</code> annotation is found, they must all have the same value
+		for the default channel.
+		See <xref linkend="publisher-annotation"/> for more information.
+	</para>
+	<para>
+		The <classname>@GlobalChannelInterceptor</classname> annotation has been introduced to
+		mark <interfacename>ChannelInterceptor</interfacename> beans for global channel interception.
+		This annotation is an analogue of the <code>&lt;int:channel-interceptor&gt;</code> xml element
+		(see <xref linkend="global-channel-configuration-interceptors"/>). <code>@GlobalChannelInterceptor</code> annotations
+		can be placed at the class level (with a <classname>@Component</classname> stereotype annotation), or
+		on <classname>@Bean</classname> methods within <classname>@Configuration</classname> classes. In either case,
+		the bean <emphasis role="bold">must</emphasis> be a <interfacename>ChannelInterceptor</interfacename>.
+	</para>
+	<para>
+		The <classname>@IntegrationConverter</classname> annotation has been introduced to
+		mark <interfacename>Converter</interfacename>, <interfacename>GenericConverter</interfacename> or
+		<interfacename>ConverterFactory</interfacename> beans as candidate converters for <code>integrationConversionService</code>.
+		This annotation is an analogue of the <code>&lt;int:converter&gt;</code> xml element
+		(see <xref linkend="payload-type-conversion"/>). <code>@IntegrationConverter</code> annotations
+		can be placed at the class level (with a <classname>@Component</classname> stereotype annotation), or
+		on <classname>@Bean</classname> methods within <classname>@Configuration</classname> classes.
+	</para>
+  </section>
+  <section id="programming-considerations">
+	<title>Programming Considerations</title>
+	<para>
+		It is generally recommended that you use plain old java objects (POJOs) whenever possible and only
+		expose the framework in your code when absolutely necessary.
+	</para>
+	<para>
+		If you do expose the framework to your classes,
+		there are some considerations that need to be taken into account, especially during application startup; some of
+		these are listed here.
+	</para>
+	<itemizedlist>
+		<listitem>
+			If your component is <interfacename>ApplicationContextAware</interfacename>, you should generally not "use"
+			the <interfacename>ApplicationContext</interfacename> in the <code>setApplicationContext()</code> method;
+			just store a reference and defer such uses until later in the context lifecycle.
+		</listitem>
+		<listitem>
+			If your component is an <interfacename>InitializingBean</interfacename> or uses <code>@PostConstruct</code>
+			methods, do not send any messages from these initialization methods - the application context is not
+			yet initialized when these methods are called, and sending such messages will likely fail.
+			If you need to send a messages during startup, implement <interfacename>ApplicationListener</interfacename>
+			and wait for the <classname>ContextRefreshedEvent</classname>. Alternatively, implement
+			<interfacename>SmartLifecycle</interfacename>, put your bean in a late phase, and send the messages
+			from the <code>start()</code> method.
+		</listitem>
+	</itemizedlist>
+
+  </section>
 </chapter>

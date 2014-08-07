@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,17 +17,17 @@
 package org.springframework.integration.transformer;
 
 import org.springframework.beans.factory.BeanFactoryAware;
-import org.springframework.integration.Message;
-import org.springframework.integration.core.MessageHandler;
 import org.springframework.integration.handler.AbstractReplyProducingMessageHandler;
 import org.springframework.integration.support.context.NamedComponent;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.util.Assert;
 
 /**
  * A reply-producing {@link MessageHandler} that delegates to a
  * {@link Transformer} instance to modify the received {@link Message}
  * and sends the result to its output channel.
- * 
+ *
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  */
@@ -39,6 +39,8 @@ public class MessageTransformingHandler extends AbstractReplyProducingMessageHan
 	/**
 	 * Create a {@link MessageTransformingHandler} instance that delegates to
 	 * the provided {@link Transformer}.
+	 *
+	 * @param transformer The transformer.
 	 */
 	public MessageTransformingHandler(Transformer transformer) {
 		Assert.notNull(transformer, "transformer must not be null");

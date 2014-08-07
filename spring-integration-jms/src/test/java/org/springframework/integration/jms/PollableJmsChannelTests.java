@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,11 @@
 
 package org.springframework.integration.jms;
 
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -40,16 +41,19 @@ import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.command.ActiveMQQueue;
 import org.junit.Test;
 import org.mockito.Mockito;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.channel.ChannelInterceptor;
+
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.integration.jms.config.ActiveMqTestUtils;
 import org.springframework.integration.jms.config.JmsChannelFactoryBean;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.jms.connection.CachingConnectionFactory;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.core.MessageCreator;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.ChannelInterceptorAdapter;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Mark Fisher
@@ -66,12 +70,15 @@ public class PollableJmsChannelTests {
 	public void queueReference() throws Exception {
 		ActiveMqTestUtils.prepare();
 		this.connectionFactory = new ActiveMQConnectionFactory();
-		this.connectionFactory.setBrokerURL("vm://localhost");
+		this.connectionFactory.setBrokerURL("vm://localhost?broker.persistent=false");
 		this.queue = new ActiveMQQueue("pollableJmsChannelTestQueue");
 
 		JmsChannelFactoryBean factoryBean = new JmsChannelFactoryBean(false);
-		factoryBean.setConnectionFactory(this.connectionFactory);
+		CachingConnectionFactory ccf = new CachingConnectionFactory(this.connectionFactory);
+		ccf.setCacheConsumers(false);
+		factoryBean.setConnectionFactory(ccf);
 		factoryBean.setDestination(this.queue);
+		factoryBean.setBeanFactory(mock(BeanFactory.class));
 		factoryBean.afterPropertiesSet();
 		PollableJmsChannel channel = (PollableJmsChannel) factoryBean.getObject();
 		boolean sent1 = channel.send(new GenericMessage<String>("foo"));
@@ -90,12 +97,15 @@ public class PollableJmsChannelTests {
 	public void queueName() throws Exception {
 		ActiveMqTestUtils.prepare();
 		this.connectionFactory = new ActiveMQConnectionFactory();
-		this.connectionFactory.setBrokerURL("vm://localhost");
+		this.connectionFactory.setBrokerURL("vm://localhost?broker.persistent=false");
 
 		JmsChannelFactoryBean factoryBean = new JmsChannelFactoryBean(false);
-		factoryBean.setConnectionFactory(this.connectionFactory);
+		CachingConnectionFactory ccf = new CachingConnectionFactory(this.connectionFactory);
+		ccf.setCacheConsumers(false);
+		factoryBean.setConnectionFactory(ccf);
 		factoryBean.setDestinationName("someDynamicQueue");
 		factoryBean.setPubSubDomain(false);
+		factoryBean.setBeanFactory(mock(BeanFactory.class));
 		factoryBean.afterPropertiesSet();
 		PollableJmsChannel channel = (PollableJmsChannel) factoryBean.getObject();
 		boolean sent1 = channel.send(new GenericMessage<String>("foo"));
@@ -114,16 +124,19 @@ public class PollableJmsChannelTests {
 	public void queueNameWithFalsePreReceiveInterceptors() throws Exception {
 		ActiveMqTestUtils.prepare();
 		this.connectionFactory = new ActiveMQConnectionFactory();
-		this.connectionFactory.setBrokerURL("vm://localhost");
+		this.connectionFactory.setBrokerURL("vm://localhost?broker.persistent=false");
 
 		JmsChannelFactoryBean factoryBean = new JmsChannelFactoryBean(false);
-		factoryBean.setConnectionFactory(this.connectionFactory);
+		CachingConnectionFactory ccf = new CachingConnectionFactory(this.connectionFactory);
+		ccf.setCacheConsumers(false);
+		factoryBean.setConnectionFactory(ccf);
 		factoryBean.setDestinationName("someDynamicQueue");
 		factoryBean.setPubSubDomain(false);
 		List<ChannelInterceptor> interceptorList = new ArrayList<ChannelInterceptor>();
 		ChannelInterceptor interceptor = spy(new SampleInterceptor(false));
 		interceptorList.add(interceptor);
 		factoryBean.setInterceptors(interceptorList);
+		factoryBean.setBeanFactory(mock(BeanFactory.class));
 		factoryBean.afterPropertiesSet();
 		PollableJmsChannel channel = (PollableJmsChannel) factoryBean.getObject();
 		boolean sent1 = channel.send(new GenericMessage<String>("foo"));
@@ -138,16 +151,19 @@ public class PollableJmsChannelTests {
 	public void queueNameWithTruePreReceiveInterceptors() throws Exception {
 		ActiveMqTestUtils.prepare();
 		this.connectionFactory = new ActiveMQConnectionFactory();
-		this.connectionFactory.setBrokerURL("vm://localhost");
+		this.connectionFactory.setBrokerURL("vm://localhost?broker.persistent=false");
 
 		JmsChannelFactoryBean factoryBean = new JmsChannelFactoryBean(false);
-		factoryBean.setConnectionFactory(this.connectionFactory);
+		CachingConnectionFactory ccf = new CachingConnectionFactory(this.connectionFactory);
+		ccf.setCacheConsumers(false);
+		factoryBean.setConnectionFactory(ccf);
 		factoryBean.setDestinationName("someDynamicQueue");
 		factoryBean.setPubSubDomain(false);
 		List<ChannelInterceptor> interceptorList = new ArrayList<ChannelInterceptor>();
 		ChannelInterceptor interceptor = spy(new SampleInterceptor(true));
 		interceptorList.add(interceptor);
 		factoryBean.setInterceptors(interceptorList);
+		factoryBean.setBeanFactory(mock(BeanFactory.class));
 		factoryBean.afterPropertiesSet();
 		PollableJmsChannel channel = (PollableJmsChannel) factoryBean.getObject();
 		boolean sent1 = channel.send(new GenericMessage<String>("foo"));
@@ -162,9 +178,10 @@ public class PollableJmsChannelTests {
 	public void qos() throws Exception {
 		ActiveMqTestUtils.prepare();
 		this.connectionFactory = new ActiveMQConnectionFactory();
-		this.connectionFactory.setBrokerURL("vm://localhost");
+		this.connectionFactory.setBrokerURL("vm://localhost?broker.persistent=false");
 		this.queue = new ActiveMQQueue("pollableJmsChannelTestQueue");
 		CachingConnectionFactory ccf = new CachingConnectionFactory(connectionFactory);
+		ccf.setCacheConsumers(false);
 
 		JmsChannelFactoryBean factoryBean = new JmsChannelFactoryBean(false);
 		factoryBean.setConnectionFactory(ccf);
@@ -174,6 +191,7 @@ public class PollableJmsChannelTests {
 		int ttl = 10000;
 		factoryBean.setTimeToLive(ttl);
 		factoryBean.setDeliveryPersistent(false);
+		factoryBean.setBeanFactory(mock(BeanFactory.class));
 		factoryBean.afterPropertiesSet();
 		PollableJmsChannel channel = (PollableJmsChannel) factoryBean.getObject();
 		final JmsTemplate receiver = new JmsTemplate(this.connectionFactory);
@@ -182,6 +200,7 @@ public class PollableJmsChannelTests {
 		final AtomicReference<javax.jms.Message> message = new AtomicReference<javax.jms.Message>();
 		final CountDownLatch latch1 = new CountDownLatch(1);
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
+			@Override
 			public void run() {
 				message.set(receiver.receive(queue));
 				latch1.countDown();
@@ -196,6 +215,7 @@ public class PollableJmsChannelTests {
 		boolean sent2 = channel.send(MessageBuilder.withPayload("foo").setPriority(6).build());
 		assertTrue(sent2);
 		Executors.newSingleThreadExecutor().execute(new Runnable() {
+			@Override
 			public void run() {
 				message.set(receiver.receive(queue));
 				latch2.countDown();
@@ -211,15 +231,18 @@ public class PollableJmsChannelTests {
 	public void selector() throws Exception {
 		ActiveMqTestUtils.prepare();
 		this.connectionFactory = new ActiveMQConnectionFactory();
-		this.connectionFactory.setBrokerURL("vm://localhost");
+		this.connectionFactory.setBrokerURL("vm://localhost?broker.persistent=false");
 		this.queue = new ActiveMQQueue("pollableJmsChannelSelectorTestQueue");
 
 		JmsChannelFactoryBean factoryBean = new JmsChannelFactoryBean(false);
-		factoryBean.setConnectionFactory(this.connectionFactory);
+		CachingConnectionFactory ccf = new CachingConnectionFactory(this.connectionFactory);
+		ccf.setCacheConsumers(false);
+		factoryBean.setConnectionFactory(ccf);
 		factoryBean.setDestination(this.queue);
 
 		factoryBean.setMessageSelector("baz='qux'");
 
+		factoryBean.setBeanFactory(mock(BeanFactory.class));
 		factoryBean.afterPropertiesSet();
 		PollableJmsChannel channel = (PollableJmsChannel) factoryBean.getObject();
 		boolean sent1 = channel.send(new GenericMessage<String>("foo"));
@@ -231,6 +254,7 @@ public class PollableJmsChannelTests {
 		jmsTemplate.setDefaultDestinationName("pollableJmsChannelSelectorTestQueue");
 		jmsTemplate.send(new MessageCreator() {
 
+			@Override
 			public javax.jms.Message createMessage(Session session) throws JMSException {
 				TextMessage message = session.createTextMessage("bar");
 				message.setStringProperty("baz", "qux");
@@ -243,24 +267,30 @@ public class PollableJmsChannelTests {
 		assertEquals("bar", result2.getPayload());
 	}
 
-	public static class SampleInterceptor implements ChannelInterceptor {
+	public static class SampleInterceptor extends ChannelInterceptorAdapter {
+
 		private final boolean preReceiveFlag;
+
 		public SampleInterceptor(boolean preReceiveFlag){
 			this.preReceiveFlag = preReceiveFlag;
 		}
 
+		@Override
 		public Message<?> preSend(Message<?> message, MessageChannel channel) {
 			return message;
 		}
 
+		@Override
 		public void postSend(Message<?> message, MessageChannel channel,
 				boolean sent) {
 		}
 
+		@Override
 		public boolean preReceive(MessageChannel channel) {
 			return this.preReceiveFlag;
 		}
 
+		@Override
 		public Message<?> postReceive(Message<?> message, MessageChannel channel) {
 			return message;
 		}

@@ -32,7 +32,6 @@ import org.junit.runner.RunWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.expression.Expression;
-import org.springframework.integration.Message;
 import org.springframework.integration.endpoint.AbstractEndpoint;
 import org.springframework.integration.file.FileNameGenerator;
 import org.springframework.integration.file.filters.RegexPatternFileListFilter;
@@ -41,9 +40,10 @@ import org.springframework.integration.file.remote.gateway.AbstractRemoteFileOut
 import org.springframework.integration.file.remote.gateway.AbstractRemoteFileOutboundGateway.Option;
 import org.springframework.integration.file.remote.session.CachingSessionFactory;
 import org.springframework.integration.handler.advice.AbstractRequestHandlerAdvice;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.sftp.gateway.SftpOutboundGateway;
 import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.util.ReflectionUtils;

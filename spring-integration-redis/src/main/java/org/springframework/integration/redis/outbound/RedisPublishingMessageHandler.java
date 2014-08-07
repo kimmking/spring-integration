@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2013 the original author or authors
+ * Copyright 2007-2014 the original author or authors
  *
  *     Licensed under the Apache License, Version 2.0 (the "License");
  *     you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.integration.redis.outbound;
 
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializer;
@@ -23,11 +24,11 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
 import org.springframework.expression.common.LiteralExpression;
-import org.springframework.integration.Message;
 import org.springframework.integration.expression.IntegrationEvaluationContextAware;
 import org.springframework.integration.handler.AbstractMessageHandler;
-import org.springframework.integration.support.converter.MessageConverter;
 import org.springframework.integration.support.converter.SimpleMessageConverter;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.converter.MessageConverter;
 import org.springframework.util.Assert;
 
 /**
@@ -71,6 +72,8 @@ public class RedisPublishingMessageHandler extends AbstractMessageHandler implem
 	}
 
 	/**
+	 * @param defaultTopic The default topic.
+	 *
 	 * @deprecated in favor of {@link #setTopicExpression(Expression)} or {@link #setTopic(String)}
 	 */
 	@Deprecated
@@ -90,15 +93,23 @@ public class RedisPublishingMessageHandler extends AbstractMessageHandler implem
 	}
 
 	@Override
+	public String getComponentType() {
+		return "redis:outbound-channel-adapter";
+	}
+
+	@Override
 	protected void onInit() throws Exception {
 		Assert.notNull(topicExpression, "'topicExpression' must not be null.");
+		if (this.messageConverter instanceof BeanFactoryAware) {
+			((BeanFactoryAware) this.messageConverter).setBeanFactory(this.getBeanFactory());
+		}
 	}
 
 	@Override
 	@SuppressWarnings("unchecked")
 	protected void handleMessageInternal(Message<?> message) throws Exception {
 		String topic = this.topicExpression.getValue(this.evaluationContext, message, String.class);
-		Object value = this.messageConverter.fromMessage(message);
+		Object value = this.messageConverter.fromMessage(message, null);
 
 		if (value instanceof byte[]) {
 			this.template.convertAndSend(topic, value);

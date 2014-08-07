@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2013-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,9 +34,11 @@ import org.springframework.core.convert.ConversionService;
 import org.springframework.expression.BeanResolver;
 import org.springframework.expression.PropertyAccessor;
 import org.springframework.expression.TypeConverter;
+import org.springframework.expression.TypeLocator;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.expression.spel.support.StandardTypeConverter;
 import org.springframework.integration.context.IntegrationContextUtils;
+import org.springframework.integration.support.utils.IntegrationUtils;
 import org.springframework.util.Assert;
 
 /**
@@ -56,7 +58,6 @@ import org.springframework.util.Assert;
  * a set of provided SpEL functions.
  * </li>
  * </ul>
- * <p/>
  * <p>
  * After initialization this factory populates functions and property accessors from
  * {@link SpelFunctionFactoryBean}s and {@link SpelPropertyAccessorRegistrar}, respectively.
@@ -78,6 +79,8 @@ public class IntegrationEvaluationContextFactoryBean implements FactoryBean<Stan
 	private volatile Map<String, Method> functions = new LinkedHashMap<String, Method>();
 
 	private TypeConverter typeConverter = new StandardTypeConverter();
+
+	private volatile TypeLocator typeLocator;
 
 	private BeanResolver beanResolver;
 
@@ -108,12 +111,16 @@ public class IntegrationEvaluationContextFactoryBean implements FactoryBean<Stan
 		this.functions = new LinkedHashMap<String, Method>(functionsArg);
 	}
 
+	public void setTypeLocator(TypeLocator typeLocator) {
+		this.typeLocator = typeLocator;
+	}
+
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
 		if (this.applicationContext != null) {
 			this.beanResolver = new BeanFactoryResolver(this.applicationContext);
-			ConversionService conversionService = IntegrationContextUtils.getConversionService(this.applicationContext);
+			ConversionService conversionService = IntegrationUtils.getConversionService(this.applicationContext);
 			if (conversionService != null) {
 				this.typeConverter = new StandardTypeConverter(conversionService);
 			}
@@ -159,6 +166,9 @@ public class IntegrationEvaluationContextFactoryBean implements FactoryBean<Stan
 	@Override
 	public StandardEvaluationContext getObject() throws Exception {
 		StandardEvaluationContext evaluationContext = new StandardEvaluationContext();
+		if (this.typeLocator != null) {
+			evaluationContext.setTypeLocator(this.typeLocator);
+		}
 
 		evaluationContext.setBeanResolver(this.beanResolver);
 		evaluationContext.setTypeConverter(this.typeConverter);

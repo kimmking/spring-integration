@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,11 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.springframework.integration.core.MessageHandler;
+
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageDeliveryException;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
@@ -47,9 +51,11 @@ public abstract class AbstractDispatcher implements MessageDispatcher {
 	private final OrderedAwareCopyOnWriteArraySet<MessageHandler> handlers =
 			new OrderedAwareCopyOnWriteArraySet<MessageHandler>();
 
+	private volatile MessageHandler theOneHandler;
+
 	/**
 	 * Set the maximum subscribers allowed by this dispatcher.
-	 * @param maxSubscribers
+	 * @param maxSubscribers The maximum number of subscribers allowed.
 	 */
 	public void setMaxSubscribers(int maxSubscribers) {
 		this.maxSubscribers = maxSubscribers;
@@ -58,6 +64,8 @@ public abstract class AbstractDispatcher implements MessageDispatcher {
 	/**
 	 * Returns an unmodifiable {@link Set} of this dispatcher's handlers. This
 	 * is provided for access by subclasses.
+	 *
+	 * @return The message handlers.
 	 */
 	protected Set<MessageHandler> getHandlers() {
 		return handlers.asUnmodifiableSet();
@@ -66,12 +74,21 @@ public abstract class AbstractDispatcher implements MessageDispatcher {
 	/**
 	 * Add the handler to the internal Set.
 	 *
+	 * @param handler The handler to add.
 	 * @return the result of {@link Set#add(Object)}
 	 */
-	public boolean addHandler(MessageHandler handler) {
+	@Override
+	public synchronized boolean addHandler(MessageHandler handler) {
 		Assert.notNull(handler, "handler must not be null");
 		Assert.isTrue(this.handlers.size() < this.maxSubscribers, "Maximum subscribers exceeded");
-		return this.handlers.add(handler);
+		boolean added = this.handlers.add(handler);
+		if (this.handlers.size() == 1) {
+			this.theOneHandler = handler;
+		}
+		else {
+			this.theOneHandler = null;
+		}
+		return added;
 	}
 
 	/**
@@ -79,9 +96,43 @@ public abstract class AbstractDispatcher implements MessageDispatcher {
 	 *
 	 * @return the result of {@link Set#remove(Object)}
 	 */
-	public boolean removeHandler(MessageHandler handler) {
+	@Override
+	public synchronized boolean removeHandler(MessageHandler handler) {
 		Assert.notNull(handler, "handler must not be null");
-		return this.handlers.remove(handler);
+		boolean removed = this.handlers.remove(handler);
+		if (this.handlers.size() == 1) {
+			this.theOneHandler = this.handlers.iterator().next();
+		}
+		else {
+			this.theOneHandler = null;
+		}
+		return removed;
+	}
+
+	protected boolean tryOptimizedDispatch(Message<?> message) {
+		MessageHandler handler = this.theOneHandler;
+		if (handler != null) {
+			try {
+				handler.handleMessage(message);
+				return true;
+			}
+			catch (Exception e) {
+				throw wrapExceptionIfNecessary(message, e);
+			}
+		}
+		return false;
+	}
+
+	protected RuntimeException wrapExceptionIfNecessary(Message<?> message, Exception e) {
+		RuntimeException runtimeException = (e instanceof RuntimeException)
+				? (RuntimeException) e
+				: new MessageDeliveryException(message,
+						"Dispatcher failed to deliver Message.", e);
+		if (e instanceof MessagingException &&
+				((MessagingException) e).getFailedMessage() == null) {
+			runtimeException = new MessagingException(message, e);
+		}
+		return runtimeException;
 	}
 
 	@Override

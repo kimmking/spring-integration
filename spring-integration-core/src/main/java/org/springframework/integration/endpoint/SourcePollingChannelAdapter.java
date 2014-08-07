@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,15 @@
 
 package org.springframework.integration.endpoint;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.core.MessageSource;
 import org.springframework.integration.core.MessagingTemplate;
 import org.springframework.integration.history.MessageHistory;
 import org.springframework.integration.history.TrackableComponent;
 import org.springframework.integration.support.context.NamedComponent;
 import org.springframework.integration.transaction.IntegrationResourceHolder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
@@ -34,6 +34,7 @@ import org.springframework.util.Assert;
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  * @author Gary Russell
+ * @author Artem Bilan
  */
 public class SourcePollingChannelAdapter extends AbstractPollingEndpoint
 		implements TrackableComponent {
@@ -48,6 +49,8 @@ public class SourcePollingChannelAdapter extends AbstractPollingEndpoint
 
 	/**
 	 * Specify the source to be polled for Messages.
+	 *
+	 * @param source The message source.
 	 */
 	public void setSource(MessageSource<?> source) {
 		this.source = source;
@@ -55,6 +58,8 @@ public class SourcePollingChannelAdapter extends AbstractPollingEndpoint
 
 	/**
 	 * Specify the {@link MessageChannel} where Messages should be sent.
+	 *
+	 * @param outputChannel The output channel.
 	 */
 	public void setOutputChannel(MessageChannel outputChannel) {
 		this.outputChannel = outputChannel;
@@ -63,6 +68,8 @@ public class SourcePollingChannelAdapter extends AbstractPollingEndpoint
 	/**
 	 * Specify the maximum time to wait for a Message to be sent to the
 	 * output channel.
+	 *
+	 * @param sendTimeout The send timeout.
 	 */
 	public void setSendTimeout(long sendTimeout) {
 		this.messagingTemplate.setSendTimeout(sendTimeout);
@@ -70,7 +77,10 @@ public class SourcePollingChannelAdapter extends AbstractPollingEndpoint
 
 	/**
 	 * Specify whether this component should be tracked in the Message History.
+	 *
+	 * @param shouldTrack true if the component should be tracked.
 	 */
+	@Override
 	public void setShouldTrack(boolean shouldTrack) {
 		this.shouldTrack = shouldTrack;
 	}
@@ -86,12 +96,15 @@ public class SourcePollingChannelAdapter extends AbstractPollingEndpoint
 		Assert.notNull(this.source, "source must not be null");
 		Assert.notNull(this.outputChannel, "outputChannel must not be null");
 		super.onInit();
+		if (this.getBeanFactory() != null) {
+			this.messagingTemplate.setBeanFactory(this.getBeanFactory());
+		}
 	}
 
 	@Override
 	protected void handleMessage(Message<?> message) {
 		if (this.shouldTrack) {
-			message = MessageHistory.write(message, this);
+			message = MessageHistory.write(message, this, this.getMessageBuilderFactory());
 		}
 		try {
 			this.messagingTemplate.send(this.outputChannel, message);

@@ -23,10 +23,10 @@ import org.junit.Test;
 
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 import org.springframework.integration.event.core.MessagingEvent;
 import org.springframework.integration.event.outbound.ApplicationEventPublishingMessageHandler;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Mark Fisher

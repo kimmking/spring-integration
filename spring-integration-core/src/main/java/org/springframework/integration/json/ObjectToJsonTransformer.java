@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,13 @@
  */
 package org.springframework.integration.json;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHeaders;
-import org.springframework.integration.support.MessageBuilder;
-import org.springframework.integration.support.json.JacksonJsonObjectMapper;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
 import org.springframework.integration.support.json.JacksonJsonObjectMapperProvider;
 import org.springframework.integration.support.json.JsonObjectMapper;
 import org.springframework.integration.transformer.AbstractTransformer;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
 import org.springframework.util.LinkedCaseInsensitiveMap;
 import org.springframework.util.StringUtils;
 
@@ -43,45 +41,43 @@ import org.springframework.util.StringUtils;
  */
 public class ObjectToJsonTransformer extends AbstractTransformer {
 
+	public static enum ResultType {
+		STRING, NODE
+	}
+
 	public static final String JSON_CONTENT_TYPE = "application/json";
 
-	private final JsonObjectMapper<?> jsonObjectMapper;
+	private final JsonObjectMapper<?, ?> jsonObjectMapper;
+
+	private final ResultType resultType;
 
 	private volatile String contentType = JSON_CONTENT_TYPE;
 
 	private volatile boolean contentTypeExplicitlySet = false;
 
-	/**
-	 * Backward compatibility - allows existing configurations using Jackson 1.x to inject
-	 * an ObjectMapper directly.
-	 * @deprecated in favor of {@link #ObjectToJsonTransformer(JsonObjectMapper)}
-	 */
-	@Deprecated
-	public ObjectToJsonTransformer(Object objectMapper) {
-		Assert.notNull(objectMapper, "objectMapper must not be null");
-		try {
-			Class<?> objectMapperClass = ClassUtils.forName("org.codehaus.jackson.map.ObjectMapper", ClassUtils.getDefaultClassLoader());
-			Assert.isTrue(objectMapperClass.isAssignableFrom(objectMapper.getClass()));
-			this.jsonObjectMapper = new JacksonJsonObjectMapper((org.codehaus.jackson.map.ObjectMapper) objectMapper);
-		}
-		catch (ClassNotFoundException e) {
-			throw new IllegalArgumentException(e);
-		}
-	}
-
-	public ObjectToJsonTransformer(JsonObjectMapper<?> jsonObjectMapper) {
-		Assert.notNull(jsonObjectMapper, "jsonObjectMapper must not be null");
-		this.jsonObjectMapper = jsonObjectMapper;
-	}
-
 	public ObjectToJsonTransformer() {
-		this.jsonObjectMapper = JacksonJsonObjectMapperProvider.newInstance();
+		this(JacksonJsonObjectMapperProvider.newInstance());
+	}
+
+	public ObjectToJsonTransformer(JsonObjectMapper<?, ?> jsonObjectMapper) {
+		this(jsonObjectMapper, ResultType.STRING);
+	}
+
+	public ObjectToJsonTransformer(ResultType resultType) {
+		this(JacksonJsonObjectMapperProvider.newInstance(), resultType);
+	}
+
+	public ObjectToJsonTransformer(JsonObjectMapper<?, ?> jsonObjectMapper, ResultType resultType) {
+		Assert.notNull(jsonObjectMapper, "jsonObjectMapper must not be null");
+		Assert.notNull(resultType, "'resultType' must not be null");
+		this.jsonObjectMapper = jsonObjectMapper;
+		this.resultType = resultType;
 	}
 
 	/**
 	 * Sets the content-type header value
 	 *
-	 * @param contentType
+	 * @param contentType The content type.
 	 */
 	public void setContentType(String contentType) {
 		// only null assertion is needed since "" is a valid value
@@ -91,9 +87,16 @@ public class ObjectToJsonTransformer extends AbstractTransformer {
 	}
 
 	@Override
+	public String getComponentType() {
+		return "object-to-json-transformer";
+	}
+
+	@Override
 	protected Object doTransform(Message<?> message) throws Exception {
-		String payload = this.jsonObjectMapper.toJson(message.getPayload());
-		MessageBuilder<String> messageBuilder = MessageBuilder.withPayload(payload);
+		Object payload = ResultType.STRING.equals(this.resultType)
+				? this.jsonObjectMapper.toJson(message.getPayload())
+				: this.jsonObjectMapper.toJsonNode(message.getPayload());
+		AbstractIntegrationMessageBuilder<Object> messageBuilder = this.getMessageBuilderFactory().withPayload(payload);
 
 		LinkedCaseInsensitiveMap<Object> headers = new LinkedCaseInsensitiveMap<Object>();
 		headers.putAll(message.getHeaders());

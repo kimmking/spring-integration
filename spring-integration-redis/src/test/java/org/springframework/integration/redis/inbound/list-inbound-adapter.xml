@@ -49,7 +49,7 @@
 	</int-redis:store-inbound-channel-adapter>
 
 	<int:transaction-synchronization-factory id="syncFactory">
-		<int:after-commit expression="#resource.attributes['store'].rename('bar')"/>
+		<int:after-commit expression="#store.rename('bar')"/>
 		<int:after-rollback expression="#store.rename('baz')"/>
 	</int:transaction-synchronization-factory>
 
@@ -85,7 +85,7 @@
 		<int:queue/>
 	</int:channel>
 
-	<bean id="redisConnectionFactory" class="org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory">
+	<bean id="redisConnectionFactory" class="org.springframework.data.redis.connection.jedis.JedisConnectionFactory">
 		<property name="port" value="#{T(org.springframework.integration.redis.rules.RedisAvailableRule).REDIS_PORT}"/>
 	</bean>
 

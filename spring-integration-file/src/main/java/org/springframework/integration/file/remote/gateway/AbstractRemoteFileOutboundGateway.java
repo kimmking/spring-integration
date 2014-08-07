@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,8 +34,6 @@ import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
 import org.springframework.expression.common.LiteralExpression;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.expression.ExpressionUtils;
 import org.springframework.integration.file.FileHeaders;
 import org.springframework.integration.file.filters.FileListFilter;
@@ -46,7 +44,8 @@ import org.springframework.integration.file.remote.session.Session;
 import org.springframework.integration.file.remote.session.SessionFactory;
 import org.springframework.integration.handler.AbstractReplyProducingMessageHandler;
 import org.springframework.integration.handler.ExpressionEvaluatingMessageProcessor;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
@@ -407,7 +406,7 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 				return AbstractRemoteFileOutboundGateway.this.ls(session, fullDir);
 			}
 		});
-		return MessageBuilder.withPayload(payload)
+		return this.getMessageBuilderFactory().withPayload(payload)
 			.setHeader(FileHeaders.REMOTE_DIRECTORY, dir)
 			.build();
 	}
@@ -425,7 +424,7 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 
 			}
 		});
-		return MessageBuilder.withPayload(payload)
+		return this.getMessageBuilderFactory().withPayload(payload)
 			.setHeader(FileHeaders.REMOTE_DIRECTORY, remoteDir)
 			.setHeader(FileHeaders.REMOTE_FILE, remoteFilename)
 			.build();
@@ -442,7 +441,7 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 				return AbstractRemoteFileOutboundGateway.this.mGet(requestMessage, session, remoteDir, remoteFilename);
 			}
 		});
-		return MessageBuilder.withPayload(payload)
+		return this.getMessageBuilderFactory().withPayload(payload)
 			.setHeader(FileHeaders.REMOTE_DIRECTORY, remoteDir)
 			.setHeader(FileHeaders.REMOTE_FILE, remoteFilename)
 			.build();
@@ -453,7 +452,7 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 		String remoteFilename = this.getRemoteFilename(remoteFilePath);
 		String remoteDir = this.getRemoteDirectory(remoteFilePath, remoteFilename);
 		boolean payload = this.remoteFileTemplate.remove(remoteFilePath);
-		return MessageBuilder.withPayload(payload)
+		return this.getMessageBuilderFactory().withPayload(payload)
 			.setHeader(FileHeaders.REMOTE_DIRECTORY, remoteDir)
 			.setHeader(FileHeaders.REMOTE_FILE, remoteFilename)
 			.build();
@@ -467,7 +466,7 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 		Assert.hasLength(remoteFileNewPath, "New filename cannot be empty");
 
 		this.remoteFileTemplate.rename(remoteFilePath, remoteFileNewPath);
-		return MessageBuilder.withPayload(Boolean.TRUE)
+		return this.getMessageBuilderFactory().withPayload(Boolean.TRUE)
 			.setHeader(FileHeaders.REMOTE_DIRECTORY, remoteDir)
 			.setHeader(FileHeaders.REMOTE_FILE, remoteFilename)
 			.setHeader(FileHeaders.RENAME_TO, remoteFileNewPath)
@@ -512,7 +511,7 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 		List<String> replies = new ArrayList<String>();
 		for (File filteredFile : filteredFiles) {
 			if (!filteredFile.isDirectory()) {
-				String path = this.doPut(MessageBuilder.withPayload(filteredFile)
+				String path = this.doPut(this.getMessageBuilderFactory().withPayload(filteredFile)
 						.copyHeaders(requestMessage.getHeaders())
 						.build(), subDirectory);
 				if (path == null) {
@@ -624,10 +623,14 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 	 * Copy a remote file to the configured local directory.
 	 *
 	 *
-	 * @param message
-	 * @param session
-	 * @param remoteDir
-	 *@param remoteFilePath  @throws IOException
+	 * @param message The message.
+	 * @param session The session.
+	 * @param remoteDir The remote directory.
+	 * @param remoteFilePath The remote file path.
+	 * @param remoteFilename The remote file name.
+	 * @param lsFirst true to execute an 'ls' command first.
+	 * @return The file.
+	 * @throws IOException Any IOException.
 	 */
 	protected File get(Message<?> message, Session<F> session, String remoteDir, String remoteFilePath, String remoteFilename, boolean lsFirst)
 			throws IOException {
@@ -650,6 +653,12 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 				session.read(remoteFilePath, outputStream);
 			}
 			catch (Exception e) {
+				/* Some operation systems acquire exclusive file-lock during file processing
+				and the file can't be deleted without closing streams before.
+				*/
+				outputStream.close();
+				tempFile.delete();
+
 				if (e instanceof RuntimeException){
 					throw (RuntimeException) e;
 				}
@@ -771,7 +780,8 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 	}
 
 	/**
-	 * @param remoteFilePath
+	 * @param remoteFilePath The remote file path.
+	 * @return The remote file name.
 	 */
 	protected String getRemoteFilename(String remoteFilePath) {
 		String remoteFileName;
@@ -788,8 +798,7 @@ public abstract class AbstractRemoteFileOutboundGateway<F> extends AbstractReply
 	private File generateLocalDirectory(Message<?> message, String remoteDirectory) {
 		EvaluationContext evaluationContext = ExpressionUtils.createStandardEvaluationContext(this.getBeanFactory());
 		evaluationContext.setVariable("remoteDirectory", remoteDirectory);
-		// TODO Change 'desiredResultType' as 'File.class' after fix of SPR-10953.
-		File localDir = new File(this.localDirectoryExpression.getValue(evaluationContext, message, String.class));
+		File localDir = this.localDirectoryExpression.getValue(evaluationContext, message, File.class);
 		if (!localDir.exists()) {
 			Assert.isTrue(localDir.mkdirs(), "Failed to make local directory: " + localDir);
 		}

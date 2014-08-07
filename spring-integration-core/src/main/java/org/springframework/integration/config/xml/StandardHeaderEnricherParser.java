@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@ import org.w3c.dom.Element;
 
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.xml.ParserContext;
-import org.springframework.integration.MessageHeaders;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
+import org.springframework.integration.handler.MethodInvokingMessageProcessor;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.util.StringUtils;
 
 /**
@@ -29,7 +31,7 @@ import org.springframework.util.StringUtils;
  * configurable {@link MessageHeaders}, such as 'reply-channel', 'priority',
  * and 'correlation-id'. It will also accept custom header values (or bean
  * references) if provided as 'header' sub-elements.
- * 
+ *
  * @author Mark Fisher
  * @author Oleg Zhurakousky
  */
@@ -38,9 +40,9 @@ public class StandardHeaderEnricherParser extends HeaderEnricherParserSupport {
 	public StandardHeaderEnricherParser() {
 		this.addElementToHeaderMapping("reply-channel", MessageHeaders.REPLY_CHANNEL);
 		this.addElementToHeaderMapping("error-channel", MessageHeaders.ERROR_CHANNEL);
-		this.addElementToHeaderMapping("correlation-id", MessageHeaders.CORRELATION_ID);
-		this.addElementToHeaderMapping("expiration-date", MessageHeaders.EXPIRATION_DATE, Long.class);
-		this.addElementToHeaderMapping("priority", MessageHeaders.PRIORITY, Integer.class);
+		this.addElementToHeaderMapping("correlation-id", IntegrationMessageHeaderAccessor.CORRELATION_ID);
+		this.addElementToHeaderMapping("expiration-date", IntegrationMessageHeaderAccessor.EXPIRATION_DATE, Long.class);
+		this.addElementToHeaderMapping("priority", IntegrationMessageHeaderAccessor.PRIORITY, Integer.class);
 	}
 
 	@Override
@@ -54,8 +56,7 @@ public class StandardHeaderEnricherParser extends HeaderEnricherParserSupport {
 						parserContext.extractSource(element));
 				return;
 			}
-			BeanDefinitionBuilder processorBuilder = BeanDefinitionBuilder.genericBeanDefinition(
-					IntegrationNamespaceUtils.BASE_PACKAGE + ".handler.MethodInvokingMessageProcessor");
+			BeanDefinitionBuilder processorBuilder = BeanDefinitionBuilder.genericBeanDefinition(MethodInvokingMessageProcessor.class);
 			processorBuilder.addConstructorArgReference(ref);
 			processorBuilder.addConstructorArgValue(method);
 			builder.addPropertyValue("messageProcessor", processorBuilder.getBeanDefinition());

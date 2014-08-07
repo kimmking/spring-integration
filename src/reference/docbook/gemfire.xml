@@ -28,7 +28,7 @@ xsi:schemaLocation="http://www.springframework.org/schema/integration/gemfire
 	http://www.springframework.org/schema/integration/gemfire/spring-integration-gemfire.xsd"]]></programlisting>
     </para>
   </section>
-  <section>
+  <section id="gemfire-inbound">
   	<title>Inbound Channel Adapter</title>
   	<para>
   	The <emphasis>inbound-channel-adapter</emphasis> produces messages on a channel triggered by a GemFire <classname>EntryEvent</classname>. GemFire
@@ -46,10 +46,15 @@ xsi:schemaLocation="http://www.springframework.org/schema/integration/gemfire
 	which can contain a comma separated list of event types for which a message will be produced on the input channel. By default CREATED and UPDATED are enabled.
 	Note that this adapter conforms to Spring integration conventions.
 	If no <code>channel</code> attribute is provided, the channel will be created from the <code>id</code> attribute. This adapter also supports an <code>error-channel</code>.
-	If <code>expression</code> is not provided the message payload will be a GemFire <classname>EntryEvent</classname>
+	The GemFire <ulink url=
+	"http://www.gemstone.com/docs/current/product/docs/japi/com/gemstone/gemfire/cache/EntryEvent.html">EntryEvent</ulink>
+	is the <code>#root</code> object of the <code>expression</code> evaluation.
+	Example:<programlisting><![CDATA[expression="new foo.MyEvent(key, oldValue, newValue)"]]></programlisting>
+	If the <code>expression</code> attribute is not provided, the message payload will be the GemFire
+	<classname>EntryEvent</classname> itself.
   	</para>
   </section>
-   <section>
+   <section id="gemfire-cq">
   	<title>Continuous Query Inbound Channel Adapter</title>
   	<para>
   	The <emphasis>cq-inbound-channel-adapter</emphasis> produces messages a channel triggered by a GemFire continuous query or <classname>CqEvent</classname> event. Spring GemFire introduced
@@ -90,7 +95,7 @@ xsi:schemaLocation="http://www.springframework.org/schema/integration/gemfire
   	</para>
   </section>
 
-   <section>
+   <section id="gemfire-outbound">
   	<title>Outbound Channel Adapter</title>
   	<para>
   	The <emphasis>outbound-channel-adapter</emphasis> writes cache entries mapped from the message payload. In its simplest form, it expects a
@@ -178,4 +183,61 @@ In the above examle, the cache and region are configured using the spring-gemfir
 Note the <emphasis>pool</emphasis> element is configured with the address of a cache server (a locator may be substituted here). The region is configured as a 'PROXY' so that no data will be stored locally. The region's id corresponds to a region with the same name configured in the cache server.
 </para>
 </section>
+	<section id="gemfire-lock-registry">
+		<title>Gemfire Lock Registry</title>
+
+		<para>
+			Starting with <emphasis>version 4.0</emphasis>, the <classname>GemfireLockRegistry</classname> is
+			available. Certain components (for example aggregator and resequencer) use a lock obtained from
+			a <interfacename>LockRegistry</interfacename> instance to ensure
+			that only one thread is manipulating a group at a time. The <classname>DefaultLockRegistry</classname>
+			performs this function within a single component; you can now configure an external lock registry
+			on these components. When used with a shared <interfacename>MessageGroupStore</interfacename>,
+			the <classname>GemfireLockRegistry</classname> can be use to provide this functionality across
+			multiple application instances, such that only one instance can manipulate the group at a time.
+			<note>
+				One of the <classname>GemfireLockRegistry</classname> constructors requires a <interfacename>Region</interfacename>
+				as an argument; it is used to obtain a <interfacename>Lock</interfacename> via the
+				<code>getDistributedLock()</code> method. This operation requires <code>GLOBAL</code>
+				scope for the <interfacename>Region</interfacename>.
+				Another constructor requires <interfacename>Cache</interfacename> and the <interfacename>Region</interfacename>
+				will be created with <code>GLOBAL</code> scope and with the name <code>LockRegistry</code>.
+			</note>
+		</para>
+	</section>
+	<section id="gemfire-metadata-store">
+		<title>Gemfire Metadata Store</title>
+		<para>
+			As of <emphasis>Spring Integration 4.0</emphasis>, a new Gemfire-based
+			<interfacename>MetadataStore</interfacename>
+			(<xref linkend="metadata-store"/>) implementation is available. The <classname>GemfireMetadataStore</classname>
+			can be used to maintain metadata state
+			across application restarts. This new <interfacename>MetadataStore</interfacename>
+			implementation can be used with adapters such as:
+		</para>
+		<itemizedlist>
+			<listitem><xref linkend="twitter-inbound"/></listitem>
+			<listitem><xref linkend="feed-inbound-channel-adapter"/></listitem>
+			<listitem><xref linkend="file-reading"/></listitem>
+			<listitem><xref linkend="ftp-inbound"/></listitem>
+			<listitem><xref linkend="sftp-inbound"/></listitem>
+		</itemizedlist>
+		<para>
+			In order to instruct these adapters to use the new <classname>GemfireMetadataStore</classname>,
+			simply declare a Spring bean using the bean name <emphasis role="bold">metadataStore</emphasis>.
+			The <emphasis>Twitter Inbound Channel Adapter</emphasis> and the
+			<emphasis>Feed Inbound Channel Adapter</emphasis> will both automatically
+			pick up and use the declared <classname>GemfireMetadataStore</classname>.
+		</para>
+		<note>
+			<para>
+				The <classname>GemfireMetadataStore</classname> also implements
+				<interfacename>ConcurrentMetadataStore</interfacename>, allowing it to be reliably shared across
+				multiple application instances where only one instance will be allowed to store or modify a key's value.
+				These methods give various levels of concurrency guarantees based on the scope and data policy of the region.
+				They are implemented in the peer cache and client/server cache but are disallowed in peer Regions having
+				NORMAL or EMPTY data policies.
+			</para>
+		</note>
+	</section>
 </chapter>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,14 @@
 
 package org.springframework.integration.config.xml;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Collections;
 import java.util.Date;
+import java.util.Map;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,17 +32,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.parsing.BeanDefinitionParsingException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.core.MessagingTemplate;
-import org.springframework.integration.core.PollableChannel;
-import org.springframework.integration.message.GenericMessage;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.transformer.MessageTransformationException;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.PollableChannel;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
-
-import static org.junit.Assert.*;
 
 /**
  * @author Mark Fisher
@@ -102,7 +108,7 @@ public class HeaderEnricherTests {
 		MessageChannel channel = context.getBean("correlationIdValueInput", MessageChannel.class);
 		Message<?> result = template.sendAndReceive(channel, new GenericMessage<String>("test"));
 		assertNotNull(result);
-		assertEquals("ABC", result.getHeaders().getCorrelationId());
+		assertEquals("ABC", new IntegrationMessageHeaderAccessor(result).getCorrelationId());
 	}
 
 	@Test
@@ -111,7 +117,7 @@ public class HeaderEnricherTests {
 		MessageChannel channel = context.getBean("correlationIdValueWithTypeInput", MessageChannel.class);
 		Message<?> result = template.sendAndReceive(channel, new GenericMessage<String>("test"));
 		assertNotNull(result);
-		Object correlationId = result.getHeaders().getCorrelationId();
+		Object correlationId = new IntegrationMessageHeaderAccessor(result).getCorrelationId();
 		assertEquals(Long.class, correlationId.getClass());
 		assertEquals(new Long(123), correlationId);
 	}
@@ -122,7 +128,7 @@ public class HeaderEnricherTests {
 		MessageChannel channel = context.getBean("correlationIdRefInput", MessageChannel.class);
 		Message<?> result = template.sendAndReceive(channel, new GenericMessage<String>("test"));
 		assertNotNull(result);
-		assertEquals(new Integer(123), result.getHeaders().getCorrelationId());
+		assertEquals(new Integer(123), new IntegrationMessageHeaderAccessor(result).getCorrelationId());
 	}
 
 	@Test
@@ -131,7 +137,7 @@ public class HeaderEnricherTests {
 		MessageChannel channel = context.getBean("expirationDateValueInput", MessageChannel.class);
 		Message<?> result = template.sendAndReceive(channel, new GenericMessage<String>("test"));
 		assertNotNull(result);
-		assertEquals(new Long(1111), result.getHeaders().getExpirationDate());
+		assertEquals(new Long(1111), new IntegrationMessageHeaderAccessor(result).getExpirationDate());
 	}
 
 	@Test
@@ -140,7 +146,7 @@ public class HeaderEnricherTests {
 		MessageChannel channel = context.getBean("expirationDateRefInput", MessageChannel.class);
 		Message<?> result = template.sendAndReceive(channel, new GenericMessage<String>("test"));
 		assertNotNull(result);
-		assertEquals(new Long(9999), result.getHeaders().getExpirationDate());
+		assertEquals(new Long(9999), new IntegrationMessageHeaderAccessor(result).getExpirationDate());
 	}
 
 	@Test
@@ -149,7 +155,16 @@ public class HeaderEnricherTests {
 		MessageChannel channel = context.getBean("priorityInput", MessageChannel.class);
 		Message<?> result = template.sendAndReceive(channel, new GenericMessage<String>("test"));
 		assertNotNull(result);
-		assertEquals(new Integer(42), result.getHeaders().getPriority());
+		assertEquals(new Integer(42), new IntegrationMessageHeaderAccessor(result).getPriority());
+	}
+
+	@Test
+	public void priorityExpression() {
+		MessagingTemplate template = new MessagingTemplate();
+		MessageChannel channel = context.getBean("priorityExpressionInput", MessageChannel.class);
+		Message<?> result = template.sendAndReceive(channel, new GenericMessage<Map<String, String>>(Collections.singletonMap("priority", "-10")));
+		assertNotNull(result);
+		assertEquals(new Integer(-10), new IntegrationMessageHeaderAccessor(result).getPriority());
 	}
 
 	@Test

@@ -16,6 +16,7 @@
 
 package org.springframework.integration.config;
 
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanClassLoaderAware;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
@@ -24,11 +25,13 @@ import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.SmartLifecycle;
-import org.springframework.integration.MessageChannel;
 import org.springframework.integration.core.MessageSource;
 import org.springframework.integration.endpoint.SourcePollingChannelAdapter;
 import org.springframework.integration.scheduling.PollerMetadata;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.core.DestinationResolutionException;
 import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 
 /**
  * FactoryBean for creating a SourcePollingChannelAdapter instance.
@@ -44,11 +47,13 @@ public class SourcePollingChannelAdapterFactoryBean implements FactoryBean<Sourc
 
 	private volatile MessageChannel outputChannel;
 
+	private volatile String outputChannelName;
+
 	private volatile PollerMetadata pollerMetadata;
 
 	private volatile boolean autoStartup = true;
 
-	private volatile int phase = 0;
+	private volatile int phase = Integer.MAX_VALUE / 2;
 
 	private volatile Long sendTimeout;
 
@@ -74,6 +79,10 @@ public class SourcePollingChannelAdapterFactoryBean implements FactoryBean<Sourc
 
 	public void setOutputChannel(MessageChannel outputChannel) {
 		this.outputChannel = outputChannel;
+	}
+
+	public void setOutputChannelName(String outputChannelName) {
+		this.outputChannelName = outputChannelName;
 	}
 
 	public void setPollerMetadata(PollerMetadata pollerMetadata) {
@@ -127,6 +136,18 @@ public class SourcePollingChannelAdapterFactoryBean implements FactoryBean<Sourc
 				return;
 			}
 			Assert.notNull(this.source, "source is required");
+
+			if (StringUtils.hasText(this.outputChannelName)) {
+				Assert.isNull(this.outputChannel, "'outputChannelName' and 'outputChannel' are mutually exclusive.");
+				try {
+					this.outputChannel = this.beanFactory.getBean(this.outputChannelName, MessageChannel.class);
+				}
+				catch (BeansException e) {
+					throw new DestinationResolutionException("Failed to look up MessageChannel with name '"
+							+ this.outputChannelName + "' in the BeanFactory.");
+				}
+			}
+
 			Assert.notNull(this.outputChannel, "outputChannel is required");
 			SourcePollingChannelAdapter spca = new SourcePollingChannelAdapter();
 			spca.setSource(this.source);
@@ -166,7 +187,7 @@ public class SourcePollingChannelAdapterFactoryBean implements FactoryBean<Sourc
 	 */
 
 	public boolean isAutoStartup() {
-		return (this.adapter != null) ? this.adapter.isAutoStartup() : true;
+		return (this.adapter == null) || this.adapter.isAutoStartup();
 	}
 
 	public int getPhase() {
@@ -174,7 +195,7 @@ public class SourcePollingChannelAdapterFactoryBean implements FactoryBean<Sourc
 	}
 
 	public boolean isRunning() {
-		return (this.adapter != null) ? this.adapter.isRunning() : false;
+		return (this.adapter != null) && this.adapter.isRunning();
 	}
 
 	public void start() {
@@ -194,4 +215,5 @@ public class SourcePollingChannelAdapterFactoryBean implements FactoryBean<Sourc
 			this.adapter.stop(callback);
 		}
 	}
+
 }

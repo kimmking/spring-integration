@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2010 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import java.lang.annotation.Target;
  * based on a message, message header(s), or both.
  * <p>
  * A method annotated with @Router may accept a parameter of type
- * {@link org.springframework.integration.Message} or of the expected
+ * {@link org.springframework.messaging.Message} or of the expected
  * Message payload's type. Any type conversion supported by
  * {@link org.springframework.beans.SimpleTypeConverter} will be applied to
  * the Message payload if necessary. Header values can also be passed as
@@ -36,13 +36,15 @@ import java.lang.annotation.Target;
  * <p>
  * Return values from the annotated method may be either a Collection or Array
  * whose elements are either
- * {@link org.springframework.integration.MessageChannel channels} or
+ * {@link org.springframework.messaging.MessageChannel channels} or
  * Strings. In the latter case, the endpoint hosting this router will attempt
- * to resolve each channel name with the Channel Registry.
+ * to resolve each channel name with the Channel Registry or with
+ * {@link #channelMappings()}, if provided.
  *
  * @author Mark Fisher
+ * @author Artem Bilan
  */
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
@@ -52,4 +54,36 @@ public @interface Router {
 
 	String defaultOutputChannel() default "";
 
+	/**
+	 * The 'key=value' pairs to represent channelMapping entries
+	 * @return the channelMappings
+	 * @see org.springframework.integration.router.AbstractMappingMessageRouter#setChannelMapping(String, String)
+	 */
+	String[] channelMappings() default {};
+
+	String prefix() default "";
+
+	String suffix() default "";
+
+	String resolutionRequired() default "";
+
+	String applySequence() default "";
+
+	String ignoreSendFailures() default "";
+
+	/*
+	 {@code SmartLifecycle} options.
+	 Can be specified as 'property placeholder', e.g. {@code ${foo.autoStartup}}.
+	 */
+	String autoStartup() default "true";
+
+	String phase() default "0";
+
+	/**
+	 * @return the {@link Poller} options for a polled endpoint
+	 * ({@link org.springframework.integration.scheduling.PollerMetadata}).
+	 * This attribute is an {@code array} just to allow an empty default (no poller).
+	 * Only one {@link Poller} element is allowed.
+	 */
+	Poller[] poller() default {};
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import org.w3c.dom.Element;
 
 import org.springframework.beans.BeanMetadataElement;
 import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.RuntimeBeanReference;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.xml.ParserContext;
@@ -42,13 +43,23 @@ public abstract class AbstractPollingInboundChannelAdapterParser extends Abstrac
 		if (source == null) {
 			parserContext.getReaderContext().error("failed to parse source", element);
 		}
-
-		String channelAdapterId = this.resolveId(element, (AbstractBeanDefinition) source, parserContext);
-		String sourceBeanName = channelAdapterId + ".source";
-		parserContext.getRegistry().registerBeanDefinition(sourceBeanName, (BeanDefinition) source);
-
 		BeanDefinitionBuilder adapterBuilder = BeanDefinitionBuilder
 				.genericBeanDefinition(SourcePollingChannelAdapterFactoryBean.class);
+
+		String sourceBeanName = null;
+
+		if (source instanceof BeanDefinition) {
+			String channelAdapterId = this.resolveId(element, adapterBuilder.getRawBeanDefinition(), parserContext);
+			sourceBeanName = channelAdapterId + ".source";
+			parserContext.getRegistry().registerBeanDefinition(sourceBeanName, (BeanDefinition) source);
+		}
+		else if (source instanceof RuntimeBeanReference) {
+			sourceBeanName = ((RuntimeBeanReference) source).getBeanName();
+		}
+		else {
+			parserContext.getReaderContext().error("Wrong 'source' type: must be 'BeanDefinition' or 'RuntimeBeanReference'", source);
+		}
+
 		adapterBuilder.addPropertyReference("source", sourceBeanName);
 		adapterBuilder.addPropertyReference("outputChannel", channelName);
 		IntegrationNamespaceUtils.setValueIfAttributeDefined(adapterBuilder, element, "send-timeout");
@@ -62,6 +73,10 @@ public abstract class AbstractPollingInboundChannelAdapterParser extends Abstrac
 	/**
 	 * Subclasses must implement this method to parse the PollableSource instance
 	 * which the created Channel Adapter will poll.
+	 *
+	 * @param element The element.
+	 * @param parserContext The parser context.
+	 * @return The bean metadata element.
 	 */
 	protected abstract BeanMetadataElement parseSource(Element element, ParserContext parserContext);
 

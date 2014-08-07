@@ -19,6 +19,7 @@ package org.springframework.integration.http.inbound;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Collections;
@@ -27,18 +28,19 @@ import java.util.Map;
 
 import javax.servlet.http.Cookie;
 
+import org.hamcrest.Matchers;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHeaders;
-import org.springframework.integration.MessagingException;
-import org.springframework.integration.core.MessageHandler;
-import org.springframework.integration.core.SubscribableChannel;
 import org.springframework.integration.http.AbstractHttpInboundTests;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandler;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.SubscribableChannel;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.ContextConfiguration;
@@ -71,7 +73,7 @@ public class Int2312RequestMappingIntegrationTests extends AbstractHttpInboundTe
 	@Autowired
 	private SubscribableChannel toLowerCaseChannel;
 
-	private HandlerAdapter handlerAdapter = new HttpRequestHandlerAdapter();
+	private final HandlerAdapter handlerAdapter = new HttpRequestHandlerAdapter();
 
 	@Test
 	public void testMultiplePathsTheSameEndpoint() throws Exception {
@@ -100,9 +102,7 @@ public class Int2312RequestMappingIntegrationTests extends AbstractHttpInboundTe
 	public void testURIVariablesAndHeaders() throws Exception {
 		MockHttpServletRequest request = new MockHttpServletRequest();
 		request.setMethod("GET");
-		String testRequest = "aBc";
-		// TODO test it after upgrade to Spring 4.0
-		// String testRequest = "aBc;q1=1;q2=2";
+		String testRequest = "aBc;q1=1;q2=2";
 		String requestURI = "/test/" + testRequest;
 		request.setRequestURI(requestURI);
 		request.setContentType("text/plain");
@@ -129,8 +129,12 @@ public class Int2312RequestMappingIntegrationTests extends AbstractHttpInboundTe
 				assertNotNull(requestParams);
 				assertEquals(params, ((MultiValueMap<String, String>) requestParams).toSingleValueMap());
 
-				// TODO test it after upgrade to Spring 4.0
-				// assertEquals(matrixVariables, headers.get("matrixVariables"));
+				Object matrixVariables = headers.get("matrixVariables");
+				assertThat(matrixVariables, Matchers.instanceOf(Map.class));
+				Object value = ((Map) matrixVariables).get("value");
+				assertThat(value, Matchers.instanceOf(MultiValueMap.class));
+				assertEquals("1", ((MultiValueMap) value).getFirst("q1"));
+				assertEquals("2", ((MultiValueMap) value).getFirst("q2"));
 
 				Object requestHeaders = headers.get("requestHeaders");
 				assertNotNull(requestParams);
@@ -149,7 +153,7 @@ public class Int2312RequestMappingIntegrationTests extends AbstractHttpInboundTe
 		Object handler = this.handlerMapping.getHandler(request).getHandler();
 		this.handlerAdapter.handle(request, response, handler);
 		final String testResponse = response.getContentAsString();
-		assertEquals(testRequest.toLowerCase(), testResponse);
+		assertEquals(testRequest.split(";")[0].toLowerCase(), testResponse);
 
 		RequestContextHolder.resetRequestAttributes();
 	}

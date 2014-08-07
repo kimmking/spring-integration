@@ -22,15 +22,16 @@ import static org.junit.Assert.fail;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.parsing.BeanDefinitionParsingException;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.core.MessagingTemplate;
 import org.springframework.integration.handler.ServiceActivatingHandler;
 import org.springframework.integration.handler.advice.AbstractRequestHandlerAdvice;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.integration.core.MessagingTemplate;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -200,8 +201,10 @@ public class ServiceActivatorParserTests {
 	}
 
 	private Object sendAndReceive(MessageChannel channel, Object payload) {
-		MessagingTemplate template = new MessagingTemplate(channel);
-		return template.convertSendAndReceive(payload);
+		MessagingTemplate template = new MessagingTemplate();
+		template.setDefaultDestination(channel);
+
+		return template.convertSendAndReceive(payload, null);
 	}
 
 
@@ -230,9 +233,9 @@ public class ServiceActivatorParserTests {
 	@SuppressWarnings("unused")
 	private static class TestPerson {
 
-		private String firstName;
+		private final String firstName;
 
-		private String lastName;
+		private final String lastName;
 
 		public TestPerson(String firstName, String lastName) {
 			this.firstName = firstName;

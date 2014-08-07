@@ -18,7 +18,7 @@ package org.springframework.integration.scripting;
 
 import java.util.Map;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
 
 /**
  * Strategy interface to provide a {@link Map} of variables to the script execution context.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -16,6 +16,7 @@ package org.springframework.integration.config.xml;
 import static org.springframework.beans.factory.xml.AbstractBeanDefinitionParser.ID_ATTRIBUTE;
 
 import java.util.List;
+import java.util.Map;
 
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -23,21 +24,25 @@ import org.w3c.dom.NodeList;
 
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinitionHolder;
+import org.springframework.beans.factory.config.ConstructorArgumentValues;
+import org.springframework.beans.factory.config.ConstructorArgumentValues.ValueHolder;
 import org.springframework.beans.factory.config.RuntimeBeanReference;
 import org.springframework.beans.factory.config.TypedStringValue;
 import org.springframework.beans.factory.parsing.BeanComponentDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
-import org.springframework.beans.factory.support.BeanDefinitionReaderUtils;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.ManagedList;
+import org.springframework.beans.factory.support.ManagedMap;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.beans.factory.xml.BeanDefinitionParserDelegate;
 import org.springframework.beans.factory.xml.ParserContext;
 import org.springframework.core.Conventions;
 import org.springframework.expression.common.LiteralExpression;
-import org.springframework.integration.channel.DirectChannel;
+import org.springframework.integration.channel.FixedSubscriberChannel;
 import org.springframework.integration.config.ExpressionFactoryBean;
-import org.springframework.integration.config.SpelFunctionFactoryBean;
+import org.springframework.integration.config.FixedSubscriberChannelBeanFactoryPostProcessor;
+import org.springframework.integration.config.IntegrationConfigUtils;
+import org.springframework.integration.context.IntegrationContextUtils;
 import org.springframework.integration.endpoint.AbstractPollingEndpoint;
 import org.springframework.transaction.interceptor.DefaultTransactionAttribute;
 import org.springframework.transaction.interceptor.MatchAlwaysTransactionAttributeSource;
@@ -60,30 +65,13 @@ import org.springframework.util.xml.DomUtils;
  */
 public abstract class IntegrationNamespaceUtils {
 
-	public static final String BASE_PACKAGE = "org.springframework.integration";
 	public static final String REF_ATTRIBUTE = "ref";
 	public static final String METHOD_ATTRIBUTE = "method";
 	public static final String ORDER = "order";
 	public static final String EXPRESSION_ATTRIBUTE = "expression";
-	public static final String HANDLER_ALIAS_SUFFIX = ".handler";
 	public static final String REQUEST_HANDLER_ADVICE_CHAIN = "request-handler-advice-chain";
 	public static final String AUTO_STARTUP = "auto-startup";
 	public static final String PHASE = "phase";
-
-	/**
-	 * Property name on ChannelInitializer used to configure the default max subscribers for
-	 * unicast channels.
-	 */
-	public static String DEFAULT_MAX_UNICAST_SUBSCRIBERS_PROPERTY_NAME = "defaultMaxUnicastSubscribers";
-
-	/**
-	 * Property name on ChannelInitializer used to configure the default max subscribers for
-	 * broadcast channels.
-	 */
-	public static String DEFAULT_MAX_BROADCAST_SUBSCRIBERS_PROPERTY_NAME = "defaultMaxBroadcastSubscribers";
-
-
-
 
 	/**
 	 * Configures the provided bean definition builder with a property value corresponding to the attribute whose name
@@ -220,6 +208,9 @@ public abstract class IntegrationNamespaceUtils {
 	/**
 	 * Provides a user friendly description of an element based on its node name and, if available, its "id" attribute
 	 * value. This is useful for creating error messages from within bean definition parsers.
+	 *
+	 * @param element The element.
+	 * @return The description.
 	 */
 	public static String createElementDescription(Element element) {
 		String elementId = "'" + element.getNodeName() + "'";
@@ -318,7 +309,13 @@ public abstract class IntegrationNamespaceUtils {
 	}
 
 	/**
-	 * Utility method to configure HeaderMapper for Inbound and Outbound channel adapters/gateway
+	 * Utility method to configure a HeaderMapper for Inbound and Outbound channel adapters/gateway.
+	 *
+	 * @param element The element.
+	 * @param rootBuilder The root builder.
+	 * @param parserContext The parser context.
+	 * @param headerMapperClass The header mapper class.
+	 * @param replyHeaderValue The reply header value.
 	 */
 	public static void configureHeaderMapper(Element element, BeanDefinitionBuilder rootBuilder,
 								ParserContext parserContext, Class<?> headerMapperClass, String replyHeaderValue) {
@@ -355,7 +352,10 @@ public abstract class IntegrationNamespaceUtils {
 	/**
 	 * Parse a "transactional" element and configure a {@link TransactionInterceptor}
 	 * with "transactionManager" and other "transactionDefinition" properties.
-	 * For example, this advisor will be applied on the Polling Task proxy
+	 * For example, this advisor will be applied on the Polling Task proxy.
+	 *
+	 * @param txElement The transactional element.
+	 * @return The bean definition.
 	 *
 	 * @see AbstractPollingEndpoint
 	 */
@@ -372,6 +372,9 @@ public abstract class IntegrationNamespaceUtils {
 	/**
 	 * Parse attributes of "transactional" element and configure a {@link DefaultTransactionAttribute}
 	 * with provided "transactionDefinition" properties.
+	 *
+	 * @param txElement The transactional element.
+	 * @return The bean definition.
 	 */
 	public static BeanDefinition configureTransactionDefinition(Element txElement) {
 		BeanDefinitionBuilder txDefinitionBuilder = BeanDefinitionBuilder.genericBeanDefinition(DefaultTransactionAttribute.class);
@@ -386,7 +389,7 @@ public abstract class IntegrationNamespaceUtils {
 		String[] handlerAlias = null;
 		String id = element.getAttribute(ID_ATTRIBUTE);
 		if (StringUtils.hasText(id)) {
-			handlerAlias = new String[] {id + HANDLER_ALIAS_SUFFIX};
+			handlerAlias = new String[] {id + IntegrationConfigUtils.HANDLER_ALIAS_SUFFIX};
 		}
 		return handlerAlias;
 	}
@@ -479,14 +482,6 @@ public abstract class IntegrationNamespaceUtils {
 		return expressionDef;
 	}
 
-	public static void registerSpelFunctionBean(BeanDefinitionRegistry registry, String functionId, String className,
-												String methodSignature) {
-		BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(SpelFunctionFactoryBean.class)
-				.addConstructorArgValue(className)
-				.addConstructorArgValue(methodSignature);
-		registry.registerBeanDefinition(functionId, builder.getBeanDefinition());
-	}
-
 	public static BeanDefinition createExpressionDefIfAttributeDefined(String expressionElementName, Element element) {
 
 		Assert.hasText(expressionElementName, "'expressionElementName' must no be empty");
@@ -507,10 +502,50 @@ public abstract class IntegrationNamespaceUtils {
 			parserContext.getReaderContext().error("The channel-adapter's 'id' attribute is required when no 'channel' "
 					+ "reference has been provided, because that 'id' would be used for the created channel.", element);
 		}
-		BeanDefinitionBuilder channelBuilder = BeanDefinitionBuilder.genericBeanDefinition(DirectChannel.class);
-		BeanDefinitionHolder holder = new BeanDefinitionHolder(channelBuilder.getBeanDefinition(), channelId);
-		BeanDefinitionReaderUtils.registerBeanDefinition(holder, parserContext.getRegistry());
+
+		IntegrationConfigUtils.autoCreateDirectChannel(channelId, parserContext.getRegistry());
+
 		return channelId;
+	}
+
+	@SuppressWarnings("unchecked")
+	public static void checkAndConfigureFixedSubscriberChannel(Element element, ParserContext parserContext,
+			String channelName, String handlerBeanName) {
+		BeanDefinitionRegistry registry = parserContext.getRegistry();
+		if (registry.containsBeanDefinition(channelName)) {
+			BeanDefinition inputChannelDefinition = registry.getBeanDefinition(channelName);
+			if (FixedSubscriberChannel.class.getName().equals(inputChannelDefinition.getBeanClassName())) {
+				ConstructorArgumentValues constructorArgumentValues = inputChannelDefinition
+						.getConstructorArgumentValues();
+				if (constructorArgumentValues.isEmpty()) {
+					constructorArgumentValues.addGenericArgumentValue(new RuntimeBeanReference(handlerBeanName));
+				}
+				else {
+					parserContext.getReaderContext().error("Only one subscriber is allowed for a FixedSubscriberChannel.",
+							element);
+				}
+			}
+		}
+		else {
+			BeanDefinition bfppd;
+			if (!registry.containsBeanDefinition(IntegrationContextUtils.INTEGRATION_FIXED_SUBSCRIBER_CHANNEL_BPP_BEAN_NAME)) {
+				bfppd = new RootBeanDefinition(FixedSubscriberChannelBeanFactoryPostProcessor.class);
+				registry.registerBeanDefinition(IntegrationContextUtils.INTEGRATION_FIXED_SUBSCRIBER_CHANNEL_BPP_BEAN_NAME, bfppd);
+			}
+			else {
+				bfppd = registry.getBeanDefinition(IntegrationContextUtils.INTEGRATION_FIXED_SUBSCRIBER_CHANNEL_BPP_BEAN_NAME);
+			}
+			ManagedMap<String, String> candidates;
+			ValueHolder argumentValue = bfppd.getConstructorArgumentValues().getArgumentValue(0, Map.class);
+			if (argumentValue == null) {
+				candidates = new ManagedMap<String, String>();
+				bfppd.getConstructorArgumentValues().addIndexedArgumentValue(0, candidates);
+			}
+			else {
+				candidates = (ManagedMap<String, String>) argumentValue.getValue();
+			}
+			candidates.put(handlerBeanName, channelName);
+		}
 	}
 
 }

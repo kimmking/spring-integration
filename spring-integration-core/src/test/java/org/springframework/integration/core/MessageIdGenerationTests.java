@@ -29,10 +29,10 @@ import org.mockito.Mockito;
 
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.context.support.GenericXmlApplicationContext;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageHeaders;
-import org.springframework.integration.MessageHeaders.IdGenerator;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHeaders;
+import org.springframework.messaging.support.GenericMessage;
+import org.springframework.util.IdGenerator;
 import org.springframework.util.ReflectionUtils;
 import org.springframework.util.StopWatch;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2013-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,15 +25,16 @@ import javax.management.ObjectInstance;
 import javax.management.ObjectName;
 import javax.management.QueryExp;
 
-import org.springframework.integration.MessagingException;
 import org.springframework.integration.core.MessageSource;
 import org.springframework.integration.endpoint.AbstractMessageSource;
+import org.springframework.messaging.MessagingException;
 import org.springframework.util.Assert;
 
 /**
  * A {@link MessageSource} implementation that retrieves a snapshot of a filtered subset of the MBean tree.
  *
  * @author Stuart Williams
+ * @author Gary Russell
  * @since 3.0
  *
  */
@@ -48,10 +49,15 @@ public class MBeanTreePollingMessageSource extends AbstractMessageSource<Object>
 	private final MBeanObjectConverter converter;
 
 	/**
-	 * @param converter
+	 * @param converter The converter.
 	 */
 	public MBeanTreePollingMessageSource(MBeanObjectConverter converter) {
 		this.converter = converter;
+	}
+
+	@Override
+	public String getComponentType() {
+		return "jmx:tree-polling-channel-adapter";
 	}
 
 	/**
@@ -80,13 +86,15 @@ public class MBeanTreePollingMessageSource extends AbstractMessageSource<Object>
 
 	/**
 	 * Provide the MBeanServer where the JMX MBean has been registered.
+	 *
+	 * @param server The MBean server connection.
 	 */
 	public void setServer(MBeanServerConnection server) {
 		this.server = server;
 	}
 
 	/**
-	 * @param queryName
+	 * @param queryName The query name.
 	 */
 	public void setQueryName(String queryName) {
 		Assert.notNull(queryName, "'queryName' must not be null");
@@ -99,14 +107,14 @@ public class MBeanTreePollingMessageSource extends AbstractMessageSource<Object>
 	}
 
 	/**
-	 * @param queryName
+	 * @param queryName The query name.
 	 */
 	public void setQueryNameReference(ObjectName queryName) {
 		this.queryName = queryName;
 	}
 
 	/**
-	 * @param queryExpression
+	 * @param queryExpression The query expression.
 	 */
 	public void setQueryExpression(String queryExpression) {
 		Assert.notNull(queryExpression, "'queryExpression' must not be null");
@@ -119,7 +127,7 @@ public class MBeanTreePollingMessageSource extends AbstractMessageSource<Object>
 	}
 
 	/**
-	 * @param queryExpression
+	 * @param queryExpression The query expression.
 	 */
 	public void setQueryExpressionReference(QueryExp queryExpression) {
 		this.queryExpression = queryExpression;

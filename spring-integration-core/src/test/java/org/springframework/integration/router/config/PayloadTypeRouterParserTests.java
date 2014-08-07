@@ -16,6 +16,8 @@
 
 package org.springframework.integration.router.config;
 
+import static org.junit.Assert.assertTrue;
+
 import java.io.ByteArrayInputStream;
 
 import org.junit.Test;
@@ -27,17 +29,11 @@ import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.core.io.InputStreamResource;
-import org.springframework.integration.Message;
-import org.springframework.integration.core.PollableChannel;
-import org.springframework.integration.endpoint.EventDrivenConsumer;
 import org.springframework.integration.support.MessageBuilder;
-import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
-import org.springframework.integration.test.util.TestUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.PollableChannel;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 /**
  * @author Oleg Zhurakousky
@@ -51,7 +47,7 @@ public class PayloadTypeRouterParserTests {
 
 	@Autowired
 	private TestService testService;
-	
+
 	@Test
 	public void testPayloadTypeRouter() {
 		context.start();
@@ -68,12 +64,9 @@ public class PayloadTypeRouterParserTests {
 		PollableChannel chanel3 = (PollableChannel) context.getBean("channel3");
 		PollableChannel chanel4 = (PollableChannel) context.getBean("channel4");
 		assertTrue(chanel1.receive(100).getPayload() instanceof String);
-		assertTrue(chanel2.receive(100).getPayload() instanceof Integer);	
-		assertTrue(chanel3.receive(100).getPayload().getClass().isArray());	
+		assertTrue(chanel2.receive(100).getPayload() instanceof Integer);
+		assertTrue(chanel3.receive(100).getPayload().getClass().isArray());
 		assertTrue(chanel4.receive(100).getPayload().getClass().isArray());
-		
-		EventDrivenConsumer edc = context.getBean("routerWithChannelResolver", EventDrivenConsumer.class);
-		assertEquals(context.getBean("cr"), TestUtils.getPropertyValue(edc, "handler.channelResolver"));
 	}
 
 	@Test(expected=BeanDefinitionStoreException.class)
@@ -84,9 +77,9 @@ public class PayloadTypeRouterParserTests {
 		reader.setValidationMode(XmlBeanDefinitionReader.VALIDATION_XSD);
 		reader.loadBeanDefinitions(new InputStreamResource(stream));
 	}
-	
+
 	@SuppressWarnings("unused")
-	private String routerConfigFakeType = 
+	private final String routerConfigFakeType =
 		"<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
 	    "<beans:beans xmlns=\"http://www.springframework.org/schema/integration\"" +
 		"    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:beans=\"http://www.springframework.org/schema/beans\"" +
@@ -99,8 +92,8 @@ public class PayloadTypeRouterParserTests {
 		"	   <mapping type=\"FAKE_TYPE\" channel=\"channel1\" />" +
 		"  </payload-type-router>" +
 	    "</beans:beans>";
-	
-	private String routerConfigNoMaping = 
+
+	private final String routerConfigNoMaping =
 		"<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
 	    "<beans:beans xmlns=\"http://www.springframework.org/schema/integration\"" +
 		"    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:beans=\"http://www.springframework.org/schema/beans\"" +
@@ -117,5 +110,4 @@ public class PayloadTypeRouterParserTests {
 		public void foo(Message<?> message);
 	}
 
-	public static class MyChannelResolver extends BeanFactoryChannelResolver{}
 }

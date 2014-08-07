@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2011 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,19 +18,19 @@ package org.springframework.integration.xmpp.outbound;
 
 import org.jivesoftware.smack.XMPPConnection;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHandlingException;
 import org.springframework.integration.xmpp.XmppHeaders;
 import org.springframework.integration.xmpp.core.AbstractXmppConnectionAwareMessageHandler;
 import org.springframework.integration.xmpp.support.DefaultXmppHeaderMapper;
 import org.springframework.integration.xmpp.support.XmppHeaderMapper;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandlingException;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
  * MessageHandler that sends an XMPP Chat Message. Supported payload types are Smack Message
  * (org.jivesoftware.smack.packet.Message) or String.
- * 
+ *
  * @author Josh Long
  * @author Mario Gray
  * @author Oleg Zhurakousky
@@ -44,7 +44,7 @@ public class ChatMessageSendingMessageHandler extends AbstractXmppConnectionAwar
 	public ChatMessageSendingMessageHandler() {
 		super();
 	}
-		
+
 	public ChatMessageSendingMessageHandler(XMPPConnection xmppConnection) {
 		super(xmppConnection);
 	}
@@ -52,6 +52,11 @@ public class ChatMessageSendingMessageHandler extends AbstractXmppConnectionAwar
 	public void setHeaderMapper(XmppHeaderMapper headerMapper) {
 		Assert.notNull(headerMapper, "headerMapper must not be null");
 		this.headerMapper = headerMapper;
+	}
+
+	@Override
+	public String getComponentType() {
+		return "xmpp:outbound-channel-adapter";
 	}
 
 	@Override
@@ -73,7 +78,7 @@ public class ChatMessageSendingMessageHandler extends AbstractXmppConnectionAwar
 		}
 		else {
 			throw new MessageHandlingException(message, "Only payloads of type java.lang.String or org.jivesoftware.smack.packet.Message " +
-					"are supported. Received [" + messageBody.getClass().getName() + 
+					"are supported. Received [" + messageBody.getClass().getName() +
 					"]. Consider adding a Transformer prior to this adapter.");
 		}
 		if (!this.xmppConnection.isConnected()) {

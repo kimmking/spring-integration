@@ -22,10 +22,11 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import org.springframework.integration.Message;
+import org.springframework.messaging.Message;
+import org.springframework.integration.IntegrationMessageHeaderAccessor;
 import org.springframework.integration.aggregator.MessageSequenceComparator;
 import org.springframework.integration.annotation.Aggregator;
-import org.springframework.integration.message.GenericMessage;
+import org.springframework.messaging.support.GenericMessage;
 
 /**
  * @author Marius Bogoevici
@@ -44,7 +45,7 @@ public class TestAggregatorBean {
 		for (Message<?> message : sortableList) {
 			buffer.append(message.getPayload().toString());
 			if (null == correlationId) {
-				correlationId = message.getHeaders().getCorrelationId();
+				correlationId = new IntegrationMessageHeaderAccessor(message).getCorrelationId();
 			}
 		}
 		Message<?> returnedMessage =  new GenericMessage<String>(buffer.toString());

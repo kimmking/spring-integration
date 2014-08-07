@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2008 the original author or authors.
+ * Copyright 2002-2013 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,16 +19,17 @@ package org.springframework.integration.channel.interceptor;
 import java.util.Arrays;
 import java.util.List;
 
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageChannel;
-import org.springframework.integration.MessageDeliveryException;
 import org.springframework.integration.core.MessageSelector;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
+import org.springframework.messaging.support.ChannelInterceptorAdapter;
 
 /**
- * A {@link org.springframework.integration.channel.ChannelInterceptor} that
+ * A {@link org.springframework.messaging.support.ChannelInterceptor ChannelInterceptor} that
  * delegates to a list of {@link MessageSelector MessageSelectors} to decide
  * whether a {@link Message} should be accepted on the {@link MessageChannel}.
- * 
+ *
  * @author Mark Fisher
  */
 public class MessageSelectingInterceptor extends ChannelInterceptorAdapter {

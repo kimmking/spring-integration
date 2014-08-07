@@ -22,15 +22,15 @@ import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.SpelParserConfiguration;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.integration.Message;
 import org.springframework.integration.handler.ExpressionEvaluatingMessageProcessor;
+import org.springframework.messaging.Message;
 
 /**
  * @author Mark Fisher
  * @author Artem Bilan
  * @since 3.0
  */
-class ExpressionEvaluatingHeaderValueMessageProcessor<T> extends AbstractHeaderValueMessageProcessor<T>
+public class ExpressionEvaluatingHeaderValueMessageProcessor<T> extends AbstractHeaderValueMessageProcessor<T>
 		implements BeanFactoryAware {
 
 	private static final ExpressionParser expressionParser = new SpelExpressionParser(new SpelParserConfiguration(
@@ -42,6 +42,9 @@ class ExpressionEvaluatingHeaderValueMessageProcessor<T> extends AbstractHeaderV
 	 * Create a header value processor for the given Expression and the
 	 * expected type of the expression evaluation result. The expectedType
 	 * may be null if unknown.
+	 *
+	 * @param expression the {@link Expression} to evaluate.
+	 * @param expectedType the type for return value of {@code expression} evaluation result.
 	 */
 	public ExpressionEvaluatingHeaderValueMessageProcessor(Expression expression, Class<T> expectedType) {
 		this.targetProcessor = new ExpressionEvaluatingMessageProcessor<T>(expression, expectedType);
@@ -51,6 +54,9 @@ class ExpressionEvaluatingHeaderValueMessageProcessor<T> extends AbstractHeaderV
 	 * Create a header value processor for the given expression string and
 	 * the expected type of the expression evaluation result. The
 	 * expectedType may be null if unknown.
+	 *
+	 * @param expressionString the {@link java.lang.String} expression presentation to evaluate.
+	 * @param expectedType the type for return value of {@code expression} evaluation result.
 	 */
 	public ExpressionEvaluatingHeaderValueMessageProcessor(String expressionString, Class<T> expectedType) {
 		Expression expression = expressionParser.parseExpression(expressionString);

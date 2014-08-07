@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,13 +22,14 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessagingException;
+import org.springframework.integration.context.IntegrationObjectSupport;
 import org.springframework.integration.handler.MessageProcessor;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.integration.transformer.support.HeaderValueMessageProcessor;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
 
 /**
  * A Transformer that adds statically configured header values to a Message.
@@ -40,7 +41,7 @@ import org.springframework.integration.transformer.support.HeaderValueMessagePro
  * @author David Turanski
  * @author Artem Bilan
  */
-public class HeaderEnricher implements Transformer, BeanNameAware, InitializingBean {
+public class HeaderEnricher extends IntegrationObjectSupport implements Transformer, BeanNameAware, InitializingBean {
 
 	private static final Log logger = LogFactory.getLog(HeaderEnricher.class);
 
@@ -52,14 +53,14 @@ public class HeaderEnricher implements Transformer, BeanNameAware, InitializingB
 
 	private volatile boolean shouldSkipNulls = true;
 
-	private Object beanName;
-
 	public HeaderEnricher() {
 		this(null);
 	}
 
 	/**
 	 * Create a HeaderEnricher with the given map of headers.
+	 *
+	 * @param headersToAdd The headers to add.
 	 */
 	public HeaderEnricher(Map<String, ? extends HeaderValueMessageProcessor<?>> headersToAdd) {
 		this.headersToAdd = (headersToAdd != null) ? headersToAdd
@@ -80,11 +81,20 @@ public class HeaderEnricher implements Transformer, BeanNameAware, InitializingB
 	 * <code>true</code>. Set this to <code>false</code> if a
 	 * <code>null</code> value should trigger <i>removal</i> of the
 	 * corresponding header instead.
+	 *
+	 * @param shouldSkipNulls true when null values should be skipped.
 	 */
 	public void setShouldSkipNulls(boolean shouldSkipNulls) {
 		this.shouldSkipNulls = shouldSkipNulls;
 	}
 
+
+	@Override
+	public String getComponentType() {
+		return "transformer"; // backwards compatibility
+	}
+
+	@Override
 	public Message<?> transform(Message<?> message) {
 		try {
 			Map<String, Object> headerMap = new HashMap<String, Object>(message.getHeaders());
@@ -110,7 +120,7 @@ public class HeaderEnricher implements Transformer, BeanNameAware, InitializingB
 					}
 				}
 			}
-			return MessageBuilder.withPayload(message.getPayload()).copyHeaders(headerMap).build();
+			return this.getMessageBuilderFactory().withPayload(message.getPayload()).copyHeaders(headerMap).build();
 		}
 		catch (Exception e) {
 			throw new MessagingException(message, "failed to transform message headers", e);
@@ -140,34 +150,23 @@ public class HeaderEnricher implements Transformer, BeanNameAware, InitializingB
 		}
 	}
 
-	/*
-	 * (non-Javadoc)
-	 *
-	 * @see
-	 * org.springframework.beans.factory.BeanNameAware#setBeanName(java.lang
-	 * .String)
-	 */
-	public void setBeanName(String beanName) {
-		this.beanName = beanName;
-
-	}
-
-	/*
-	 * (non-Javadoc)
-	 *
-	 * @see
-	 * org.springframework.beans.factory.InitializingBean#afterPropertiesSet()
-	 */
-	public void afterPropertiesSet() throws Exception {
+	@Override
+	public void onInit() throws Exception {
 		boolean shouldOverwrite = this.defaultOverwrite;
 		for (HeaderValueMessageProcessor<?> processor : this.headersToAdd.values()) {
+			if (processor instanceof BeanFactoryAware && this.getBeanFactory() != null) {
+				((BeanFactoryAware) processor).setBeanFactory(this.getBeanFactory());
+			}
 			Boolean processerOverwrite = processor.isOverwrite();
 			if (processerOverwrite != null) {
 				shouldOverwrite |= processerOverwrite;
 			}
 		}
+		if (this.messageProcessor != null && this.messageProcessor instanceof BeanFactoryAware && this.getBeanFactory() != null) {
+			((BeanFactoryAware) this.messageProcessor).setBeanFactory(this.getBeanFactory());
+		}
 		if (!shouldOverwrite && !this.shouldSkipNulls) {
-			logger.warn(this.beanName
+			logger.warn(this.getComponentName()
 					+ " is configured to not overwrite existing headers. 'shouldSkipNulls = false' will have no effect");
 		}
 	}

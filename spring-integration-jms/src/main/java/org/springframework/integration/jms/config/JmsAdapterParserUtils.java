@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.integration.jms.config;
 
+import org.w3c.dom.Element;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.xml.ParserContext;
@@ -23,7 +24,6 @@ import org.springframework.integration.config.xml.IntegrationNamespaceUtils;
 import org.springframework.integration.jms.DynamicJmsTemplate;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.util.StringUtils;
-import org.w3c.dom.Element;
 
 /**
  * Utility methods and constants for JMS adapter parsers.
@@ -64,23 +64,8 @@ abstract class JmsAdapterParserUtils {
 	private static final String[] JMS_TEMPLATE_ATTRIBUTES = {
 		"connection-factory", "message-converter", "destination-resolver", "pub-sub-domain",
 		"time-to-live", "priority", "delivery-persistent", "explicit-qos-enabled", "acknowledge",
-		"receive-timeout"
+		"receive-timeout", "session-transacted"
 	};
-
-
-	/*
-	 * The following constants match those of javax.jms.Session.
-	 * They are duplicated here to avoid a dependency in tooling.
-	 */
-
-	static final int SESSION_TRANSACTED = 0;
-
-	private static final int AUTO_ACKNOWLEDGE = 1;
-
-	private static final int CLIENT_ACKNOWLEDGE = 2;
-
-	private static final int DUPS_OK_ACKNOWLEDGE = 3;
-
 
 	static String determineConnectionFactoryBeanName(Element element, ParserContext parserContext) {
 		String connectionFactoryBeanName = "connectionFactory";
@@ -92,30 +77,6 @@ abstract class JmsAdapterParserUtils {
 			}
 		}
 		return connectionFactoryBeanName;
-	}
-
-	static Integer parseAcknowledgeMode(Element element, ParserContext parserContext) {
-		String acknowledge = element.getAttribute("acknowledge");
-		if (StringUtils.hasText(acknowledge)) {
-			int acknowledgeMode = AUTO_ACKNOWLEDGE;
-			if ("transacted".equals(acknowledge)) {
-				acknowledgeMode = SESSION_TRANSACTED;
-			}
-			else if ("dups-ok".equals(acknowledge)) {
-				acknowledgeMode = DUPS_OK_ACKNOWLEDGE;
-			}
-			else if ("client".equals(acknowledge)) {
-				acknowledgeMode = CLIENT_ACKNOWLEDGE;
-			}
-			else if (!"auto".equals(acknowledge)) {
-				parserContext.getReaderContext().error("Invalid JMS 'acknowledge' setting: " +
-						"only \"auto\", \"client\", \"dups-ok\" and \"transacted\" supported.", element);
-			}
-			return acknowledgeMode;
-		}
-		else {
-			return null;
-		}
 	}
 
 	static BeanDefinition parseJmsTemplateBeanDefinition(Element element, ParserContext parserContext) {
@@ -136,11 +97,7 @@ abstract class JmsAdapterParserUtils {
 		else {
 			builder.addPropertyValue("receiveTimeout", JmsTemplate.RECEIVE_TIMEOUT_NO_WAIT);
 		}
-		Integer acknowledgeMode = parseAcknowledgeMode(element, parserContext);
-		if (acknowledgeMode != null) {
-			builder.addPropertyValue("sessionAcknowledgeMode", acknowledgeMode);
-		}
-
+		IntegrationNamespaceUtils.setValueIfAttributeDefined(builder, element, "session-transacted");
 		return builder.getBeanDefinition();
 	}
 

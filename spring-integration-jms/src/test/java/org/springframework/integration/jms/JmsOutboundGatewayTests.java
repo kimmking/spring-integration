@@ -43,6 +43,7 @@ import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.integration.jms.JmsOutboundGateway.ReplyContainerProperties;
 import org.springframework.integration.test.util.TestUtils;
@@ -68,6 +69,7 @@ public class JmsOutboundGatewayTests {
 		gateway.setRequestDestinationName("foo");
 		gateway.setUseReplyContainer(true);
 		gateway.setReplyContainerProperties(new ReplyContainerProperties());
+		gateway.setBeanFactory(mock(BeanFactory.class));
 		gateway.afterPropertiesSet();
 		assertEquals("JMS_OutboundGateway@" + ObjectUtils.getIdentityHexString(gateway) +
 				".replyListener",
@@ -140,8 +142,16 @@ public class JmsOutboundGatewayTests {
 		gateway.setBeanFactory(beanFactory);
 		gateway.afterPropertiesSet();
 		gateway.start();
-		Thread.sleep(1000);
-		assertTrue(count.get() > 4);
-		assertEquals(0, errors.size());
+		try {
+			int n = 0;
+			while (n++ < 100 && count.get() < 5) {
+				Thread.sleep(100);
+			}
+			assertTrue(count.get() > 4);
+			assertEquals(0, errors.size());
+		}
+		finally {
+			gateway.stop();
+		}
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,19 @@ import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.springframework.integration.Message;
-import org.springframework.integration.MessageHandlingException;
+
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.integration.ip.IpHeaders;
 import org.springframework.integration.mapping.InboundMessageMapper;
 import org.springframework.integration.mapping.OutboundMessageMapper;
-import org.springframework.integration.support.MessageBuilder;
+import org.springframework.integration.support.AbstractIntegrationMessageBuilder;
+import org.springframework.integration.support.DefaultMessageBuilderFactory;
+import org.springframework.integration.support.MessageBuilderFactory;
+import org.springframework.integration.support.utils.IntegrationUtils;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageHandlingException;
 
 /**
  * Maps incoming data from a {@link TcpConnection} to a {@link Message}.
@@ -43,7 +50,8 @@ import org.springframework.integration.support.MessageBuilder;
  */
 public class TcpMessageMapper implements
 		InboundMessageMapper<TcpConnection>,
-		OutboundMessageMapper<Object> {
+		OutboundMessageMapper<Object>,
+		BeanFactoryAware {
 
 	protected final Log logger = LogFactory.getLog(this.getClass());
 
@@ -53,11 +61,46 @@ public class TcpMessageMapper implements
 
 	private volatile boolean applySequence = false;
 
-	public Message<Object> toMessage(TcpConnection connection) throws Exception {
+	private volatile MessageBuilderFactory messageBuilderFactory = new DefaultMessageBuilderFactory();
+
+	/**
+	 * @param charset the charset to set
+	 */
+	public void setCharset(String charset) {
+		this.charset = charset;
+	}
+
+	/**
+	 * Sets whether outbound String payloads are to be converted
+	 * to byte[]. Default is true.
+	 * @param stringToBytes The stringToBytes to set.
+	 */
+	public void setStringToBytes(boolean stringToBytes) {
+		this.stringToBytes = stringToBytes;
+	}
+
+	/**
+	 * @param applySequence The applySequence to set.
+	 */
+	public void setApplySequence(boolean applySequence) {
+		this.applySequence = applySequence;
+	}
+
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+		this.messageBuilderFactory = IntegrationUtils.getMessageBuilderFactory(beanFactory);
+	}
+
+	protected MessageBuilderFactory getMessageBuilderFactory() {
+		return messageBuilderFactory;
+	}
+
+	@Override
+	public Message<?> toMessage(TcpConnection connection) throws Exception {
 		Message<Object> message = null;
 		Object payload = connection.getPayload();
 		if (payload != null) {
-			MessageBuilder<Object> messageBuilder = MessageBuilder.withPayload(payload);
+			AbstractIntegrationMessageBuilder<Object> messageBuilder = this.messageBuilderFactory.withPayload(payload);
 			this.addStandardHeaders(connection, messageBuilder);
 			this.addCustomHeaders(connection, messageBuilder);
 			message = messageBuilder.build();
@@ -70,7 +113,7 @@ public class TcpMessageMapper implements
 		return message;
 	}
 
-	protected final void addStandardHeaders(TcpConnection connection, MessageBuilder<?> messageBuilder) {
+	protected final void addStandardHeaders(TcpConnection connection, AbstractIntegrationMessageBuilder<?> messageBuilder) {
 		String connectionId = connection.getConnectionId();
 		messageBuilder
 			.setHeader(IpHeaders.HOSTNAME, connection.getHostName())
@@ -84,7 +127,7 @@ public class TcpMessageMapper implements
 		}
 	}
 
-	protected final void addCustomHeaders(TcpConnection connection, MessageBuilder<?> messageBuilder) {
+	protected final void addCustomHeaders(TcpConnection connection, AbstractIntegrationMessageBuilder<?> messageBuilder) {
 		Map<String, ?> customHeaders = this.supplyCustomHeaders(connection);
 		if (customHeaders != null) {
 			messageBuilder.copyHeadersIfAbsent(customHeaders);
@@ -101,6 +144,7 @@ public class TcpMessageMapper implements
 		return null;
 	}
 
+	@Override
 	public Object fromMessage(Message<?> message) throws Exception {
 		if (this.stringToBytes) {
 			return getPayloadAsBytes(message);
@@ -131,31 +175,6 @@ public class TcpMessageMapper implements
 					"either a byte array or String payload, but received: " + payload.getClass());
 		}
 		return bytes;
-	}
-
-
-	/**
-	 * @param charset the charset to set
-	 */
-	public void setCharset(String charset) {
-		this.charset = charset;
-	}
-
-
-	/**
-	 * Sets whether outbound String payloads are to be converted
-	 * to byte[]. Default is true.
-	 * @param stringToBytes
-	 */
-	public void setStringToBytes(boolean stringToBytes) {
-		this.stringToBytes = stringToBytes;
-	}
-
-	/**
-	 * @param applySequence the applySequence to set
-	 */
-	public void setApplySequence(boolean applySequence) {
-		this.applySequence = applySequence;
 	}
 
 }
